@@ -20,8 +20,7 @@ $containerName = "emails"
 
 # Download metadata.json
 $ctx = New-AzStorageContext -ConnectionString $storageConnection
-$blob = Get-AzStorageBlob -Container $container -Blob "$correlationId/$blobName" -Context $ctx
-$content = (Get-AzStorageBlobContent -Blob $blob.Name -Container $container -Context $ctx -Force -Destination (New-TemporaryFile)).Content | Get-Content -Raw
+$content = (Get-AzStorageBlobContent -Blob "$correlationId/$blobName" -Container $container -Context $ctx -Force -Destination (New-TemporaryFile)).Content | Get-Content -Raw
 $metadata = $content | ConvertFrom-Json
 
 $doc = [pscustomobject]@{
