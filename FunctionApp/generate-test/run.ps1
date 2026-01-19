@@ -1,12 +1,8 @@
-param($Request, $Response, $metadataBlob, $attachmentBlob, $queueMsg, $correlationId)
+param($Request)
 
-if (-not $correlationId) {
-    $Response = @{
-        statusCode = 400
-        body       = "correlationId route parameter is required"
-    }
-    return
-}
+$correlationId = $Request.Params.correlationId
+if (-not $correlationId) { $correlationId = $Request.Query.correlationId }
+if (-not $correlationId) { $correlationId = "test-" + ([guid]::NewGuid().ToString()) }
 
 $cid = $correlationId
 $now = (Get-Date).ToString("o")
@@ -41,11 +37,14 @@ $queueMsg = @{
     }
 } | ConvertTo-Json -Depth 5
 
-$Response = @{
+Push-OutputBinding -Name metadataBlob -Value $metadata | Out-Null
+Push-OutputBinding -Name attachmentBlob -Value $attachmentBlob | Out-Null
+Push-OutputBinding -Name queueMsg -Value $queueMsg | Out-Null
+Push-OutputBinding -Name Response -Value (@{
     statusCode = 200
     body       = @{
         correlationId = $cid
         metadataPath  = $metadataPath
         attachmentPath = $attachmentPath
     } | ConvertTo-Json
-}
+})
