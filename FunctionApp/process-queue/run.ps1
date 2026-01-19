@@ -1,11 +1,10 @@
 using namespace System.Text.Json
 
-param($metadata, $existingDoc, $TriggerMetadata)
+param($metadata, $TriggerMetadata)
 
 # Blob trigger already gives us metadata content; path format emails/{correlationId}/metadata.json
 $correlationId = $TriggerMetadata.Name.Split("/")[1]
 $metadata = $metadata | ConvertFrom-Json
-$existing = $existingDoc
 
 $doc = [pscustomobject]@{
     id            = $metadata.messageId
@@ -18,7 +17,7 @@ $doc = [pscustomobject]@{
     hasAttachments= $metadata.hasAttachments
     attachmentBlobPaths = $metadata.attachmentBlobPaths
     messageId     = $metadata.messageId
-    createdAt     = if ($existing) { $existing.createdAt } else { (Get-Date).ToString("o") }
+    createdAt     = (Get-Date).ToString("o")
 }
 
 # Return correlation id for logging and emit doc to Cosmos output binding
