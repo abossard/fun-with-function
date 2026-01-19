@@ -112,6 +112,7 @@ Use Azurite for local Storage emulation and the `generate-test` function to crea
 
 This will write `emails/test-123/metadata.json`, `emails/test-123/attachments/fake.txt`, and enqueue a message to `hr-attachments-q`.
 
+> Note: Ensure the `emails` blob container and `hr-attachments-q` queue exist in your Azurite storage account before running the `generate-test` function, or verify that your Functions runtime is configured to auto-create them. If Azurite or your bindings do not support auto-creation, create these resources manually (for example, using Azure Storage Explorer or the Azurite REST API/SDKs).
 ## Use case: mail attachment processing (repo example)
 **Flow recap**
 - Logic App writes `metadata.json` + attachments to blob.
