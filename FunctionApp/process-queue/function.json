@@ -8,6 +8,16 @@
       "connection": "AzureWebJobsStorage"
     },
     {
+      "name": "existingDoc",
+      "type": "cosmosDB",
+      "direction": "in",
+      "databaseName": "hrdb",
+      "collectionName": "emails",
+      "id": "{metadata.messageId}",
+      "partitionKey": "{metadata.fromEmail}",
+      "connection": "CosmosDBConnection"
+    },
+    {
       "name": "cosmosDoc",
       "type": "cosmosDB",
       "direction": "out",
