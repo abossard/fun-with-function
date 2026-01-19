@@ -23,7 +23,7 @@ flowchart LR
     Blob -->|BlobCreated events| EventGrid[Event Grid]
     EventGrid --> Queue[(Storage Queue)]
     Queue --> AttachmentFn[Queue-triggered Function]
-    AttachmentFn --> Logs[App Insights / Logs]
+    AttachmentFn --> Logs[Application Insights]
 ```
 
 ## Integration pattern chooser (Mermaid)
