@@ -10,8 +10,8 @@ $blobUrl = $data.url
 # correlationId assumed in path: emails/{correlationId}/metadata.json
 $segments = $blobUrl -split "/"
 $blobName = $segments[-1]
-$container = $segments[-2]
-$correlationId = $segments[-3]
+$correlationId = $segments[-2]
+$container = "emails"
 
 $storageConnection = $env:AzureWebJobsStorage
 $cosmosConn = $env:CosmosDBConnection
