@@ -1,0 +1,38 @@
+{
+  "bindings": [
+    {
+      "authLevel": "anonymous",
+      "type": "httpTrigger",
+      "direction": "in",
+      "name": "Request",
+      "methods": [ "get", "post" ],
+      "route": "test/generate/{correlationId}"
+    },
+    {
+      "type": "http",
+      "direction": "out",
+      "name": "Response"
+    },
+    {
+      "name": "metadataBlob",
+      "type": "blob",
+      "direction": "out",
+      "path": "emails/{correlationId}/metadata.json",
+      "connection": "AzureWebJobsStorage"
+    },
+    {
+      "name": "attachmentBlob",
+      "type": "blob",
+      "direction": "out",
+      "path": "emails/{correlationId}/attachments/fake.txt",
+      "connection": "AzureWebJobsStorage"
+    },
+    {
+      "name": "queueMsg",
+      "type": "queue",
+      "direction": "out",
+      "queueName": "hr-attachments-q",
+      "connection": "AzureWebJobsStorage"
+    }
+  ]
+}
