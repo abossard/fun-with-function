@@ -1,0 +1,13 @@
+{
+  "bindings": [
+    {
+      "name": "QueueItem",
+      "type": "queueTrigger",
+      "direction": "in",
+      "queueName": "hr-ingest-q",
+      "connection": "AzureWebJobsStorage"
+    }
+  ],
+  "scriptFile": "run.ps1",
+  "entryPoint": null
+}
