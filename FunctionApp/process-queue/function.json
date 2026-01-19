@@ -8,6 +8,5 @@
       "connection": "AzureWebJobsStorage"
     }
   ],
-  "scriptFile": "run.ps1",
-  "entryPoint": null
+  "scriptFile": "run.ps1"
 }
