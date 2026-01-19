@@ -1,23 +1,10 @@
 using namespace System.Text.Json
 
-param($QueueItem, $TriggerMetadata)
+param($metadata, $TriggerMetadata)
 
-# Expect queue payload with storage event grid data
-$event = $QueueItem | ConvertFrom-Json
-$data = $event.data
-$blobUrl = $data.url
-
-# correlationId assumed in path: emails/{correlationId}/metadata.json
-$segments = $blobUrl -split "/"
-$blobName = $segments[-1]
-$correlationId = $segments[-2]
-$container = "emails"
-
-$storageConnection = $env:AzureWebJobsStorage
-# Download metadata.json
-$ctx = New-AzStorageContext -ConnectionString $storageConnection
-$content = (Get-AzStorageBlobContent -Blob "$correlationId/$blobName" -Container $container -Context $ctx -Force -Destination (New-TemporaryFile)).Content | Get-Content -Raw
-$metadata = $content | ConvertFrom-Json
+# Blob trigger already gives us metadata content; path format emails/{correlationId}/metadata.json
+$correlationId = $TriggerMetadata.Name.Split("/")[1]
+$metadata = $metadata | ConvertFrom-Json
 
 $doc = [pscustomobject]@{
     id            = $metadata.messageId

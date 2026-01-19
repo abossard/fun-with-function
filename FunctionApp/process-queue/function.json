@@ -1,10 +1,10 @@
 {
   "bindings": [
     {
-      "name": "QueueItem",
-      "type": "queueTrigger",
+      "name": "metadata",
+      "type": "blobTrigger",
       "direction": "in",
-      "queueName": "hr-ingest-q",
+      "path": "emails/{correlationId}/metadata.json",
       "connection": "AzureWebJobsStorage"
     },
     {
