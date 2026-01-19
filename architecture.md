@@ -29,10 +29,10 @@ flowchart LR
 ## Integration pattern chooser (Mermaid)
 ```mermaid
 flowchart TD
-    Start[Need to integrate or automate?] --> Req{Need low latency<br/>or fire-and-forget?}
+    Start[Need to integrate or automate?] --> Req{Need immediate synchronous<br/>response?}
     Req -->|Yes| Request[Request/Response or Webhook<br/>Use for quick sync results]
     Req -->|No| FanOut{Need fan-out or reliability?}
-    FanOut -->|Yes| Queue[Message Queue<br/>Use for buffering, retries, fan-out]
+    FanOut -->|Yes| Queue[Message Queue<br/>Use for buffering, retries, fan-out,<br/>and fire-and-forget]
     FanOut -->|No| Changes{React to Azure resource changes?}
     Changes -->|Yes| EventGrid[Event Grid<br/>Use to react to Blob/Resource events]
     Changes -->|No| Scheduled{Need scheduled or recurring checks?}
