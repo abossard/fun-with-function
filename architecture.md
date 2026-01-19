@@ -40,7 +40,7 @@ flowchart TD
     Scheduled -->|No| Review[Reassess requirements<br/>Consider Durable Functions or Logic Apps]
 ```
 
-## Start-to-hero guide (from zero)
+## Zero-to-hero guide
 This repo models an **Azure Integration Services** pattern that uses Logic Apps for orchestration, Functions for compute, and Event Grid + Storage Queues for reliable fan-out. The goal is to keep **ingestion**, **processing**, and **state** separated so each piece can scale and evolve independently.
 
 ### 1) What problem are we solving?
