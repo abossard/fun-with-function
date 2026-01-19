@@ -1,0 +1,21 @@
+{
+  "bindings": [
+    {
+      "name": "metadata",
+      "type": "blobTrigger",
+      "direction": "in",
+      "path": "emails/{correlationId}/metadata.json",
+      "connection": "AzureWebJobsStorage"
+    },
+    {
+      "name": "cosmosDoc",
+      "type": "cosmosDB",
+      "direction": "out",
+      "databaseName": "hrdb",
+      "collectionName": "emails",
+      "createIfNotExists": true,
+      "connection": "CosmosDBConnection"
+    }
+  ],
+  "scriptFile": "run.ps1"
+}

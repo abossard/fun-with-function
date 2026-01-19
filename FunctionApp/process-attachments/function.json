@@ -1,0 +1,12 @@
+{
+  "bindings": [
+    {
+      "name": "QueueItem",
+      "type": "queueTrigger",
+      "direction": "in",
+      "queueName": "hr-attachments-q",
+      "connection": "AzureWebJobsStorage"
+    }
+  ],
+  "scriptFile": "run.ps1"
+}
