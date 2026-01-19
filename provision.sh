@@ -36,7 +36,7 @@ cosmosConn=$(az cosmosdb keys list -g "$rg" -n "$cosmos" --type connection-strin
 echo "Function App on Flex Consumption..."
 az functionapp plan create -g "$rg" -n "$plan" --location "$location" --flex-consumption
 az functionapp create -g "$rg" -p "$plan" -n "$functionapp" --storage-account "$storage" --runtime powershell --runtime-version 7.4 --functions-version 4 --os-type Linux --consumption-plan-location "$location"
-az resource update -g "$rg" -n "$functionapp" --resource-type Microsoft.Web/sites/config --set properties.appSettings="[{\"name\":\"AzureWebJobsStorage\",\"value\":\"DefaultEndpointsProtocol=https;AccountName=$storage;AccountKey=$accountKey;EndpointSuffix=core.windows.net\"},{\"name\":\"CosmosDBConnection\",\"value\":\"$cosmosConn\"}]"
+az functionapp config appsettings set -g "$rg" -n "$functionapp" --settings AzureWebJobsStorage="DefaultEndpointsProtocol=https;AccountName=$storage;AccountKey=$accountKey;EndpointSuffix=core.windows.net" CosmosDBConnection="$cosmosConn"
 az monitor app-insights component create -g "$rg" -a "${functionapp}-ai" -l "$location"
 az functionapp update -g "$rg" -n "$functionapp" --set appInsightsKey=$(az monitor app-insights component show -g "$rg" -a "${functionapp}-ai" --query instrumentationKey -o tsv)
 
