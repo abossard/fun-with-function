@@ -38,7 +38,8 @@ az functionapp plan create -g "$rg" -n "$plan" --location "$location" --flex-con
 az functionapp create -g "$rg" -p "$plan" -n "$functionapp" --storage-account "$storage" --runtime powershell --runtime-version 7.4 --functions-version 4 --os-type Linux --consumption-plan-location "$location"
 az functionapp config appsettings set -g "$rg" -n "$functionapp" --settings AzureWebJobsStorage="DefaultEndpointsProtocol=https;AccountName=$storage;AccountKey=$accountKey;EndpointSuffix=core.windows.net" CosmosDBConnection="$cosmosConn"
 az monitor app-insights component create -g "$rg" -a "${functionapp}-ai" -l "$location"
-az functionapp update -g "$rg" -n "$functionapp" --set appInsightsKey=$(az monitor app-insights component show -g "$rg" -a "${functionapp}-ai" --query instrumentationKey -o tsv)
+aiConnectionString=$(az monitor app-insights component show -g "$rg" -a "${functionapp}-ai" --query connectionString -o tsv)
+az functionapp config appsettings set -g "$rg" -n "$functionapp" --settings "APPLICATIONINSIGHTS_CONNECTION_STRING=$aiConnectionString"
 
 echo "Event Grid subscription with filters..."
 az eventgrid event-subscription create \
