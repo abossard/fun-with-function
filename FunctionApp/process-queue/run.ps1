@@ -22,4 +22,9 @@ $doc = [pscustomobject]@{
 
 # Return correlation id for logging and emit doc to Cosmos output binding
 Write-Host "Writing document for correlationId $($doc.correlationId)"
-Push-OutputBinding -Name cosmosDoc -Value $doc
+$cosmosDisabled = ($env:DISABLE_COSMOS_OUTPUT -eq "true")
+if (-not $cosmosDisabled) {
+    Push-OutputBinding -Name cosmosDoc -Value $doc
+} else {
+    Write-Host "Cosmos output skipped (DISABLE_COSMOS_OUTPUT=true)."
+}
