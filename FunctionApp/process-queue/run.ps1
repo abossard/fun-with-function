@@ -14,10 +14,6 @@ $correlationId = $segments[-2]
 $container = "emails"
 
 $storageConnection = $env:AzureWebJobsStorage
-$cosmosConn = $env:CosmosDBConnection
-$database = "hrdb"
-$containerName = "emails"
-
 # Download metadata.json
 $ctx = New-AzStorageContext -ConnectionString $storageConnection
 $content = (Get-AzStorageBlobContent -Blob "$correlationId/$blobName" -Container $container -Context $ctx -Force -Destination (New-TemporaryFile)).Content | Get-Content -Raw
@@ -37,10 +33,6 @@ $doc = [pscustomobject]@{
     createdAt     = (Get-Date).ToString("o")
 }
 
-# Upsert into Cosmos DB
+# Return correlation id for logging and emit doc to Cosmos output binding
 Write-Host "Writing document for correlationId $($doc.correlationId)"
-$client = New-AzCosmosDBV2Client -ConnectionString $cosmosConn
-New-AzCosmosDBV2Document -Client $client -Database $database -Container $containerName -DocumentBody ($doc | ConvertTo-Json -Depth 5) | Out-Null
-
-# Return correlation id for logging
-Push-OutputBinding -Name res -Value $doc.correlationId
+Push-OutputBinding -Name cosmosDoc -Value $doc

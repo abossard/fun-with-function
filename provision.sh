@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ $# -ne 1 ]; then
-  echo "Usage: $0 <name-prefix>"
+if [ $# -ne 2 ]; then
+  echo "Usage: $0 <name-prefix> <resource-group>"
   exit 1
 fi
 
 prefix=$1
-location="westeurope"
-rg="${prefix}-rg"
+rg=$2
+location="swedencentral"
 storage="${prefix}storage"
 queue="hr-ingest-q"
 functionapp="${prefix}-func"
@@ -18,8 +18,8 @@ database="hrdb"
 container="emails"
 logicapp="${prefix}-logic"
 
-echo "Creating resource group..."
-az group create -n "$rg" -l "$location"
+echo "Preparing local PowerShell modules for Flex (saved under FunctionApp/modules)..."
+pwsh -NoLogo -NoProfile -File ./fetch-modules.ps1
 
 echo "Storage account..."
 az storage account create -g "$rg" -n "$storage" -l "$location" --sku Standard_LRS
@@ -34,8 +34,8 @@ az cosmosdb sql container create -g "$rg" -a "$cosmos" -d "$database" -n "$conta
 cosmosConn=$(az cosmosdb keys list -g "$rg" -n "$cosmos" --type connection-strings --query "connectionStrings[0].connectionString" -o tsv)
 
 echo "Function App on Flex Consumption..."
-az functionapp plan create -g "$rg" -n "$plan" --location "$location" --flex-consumption
-az functionapp create -g "$rg" -p "$plan" -n "$functionapp" --storage-account "$storage" --runtime powershell --runtime-version 7.4 --functions-version 4 --os-type Linux --consumption-plan-location "$location"
+az functionapp plan create -g "$rg" -n "$plan" --location "$location" --sku FC1 --is-linux
+az functionapp create -g "$rg" -p "$plan" -n "$functionapp" --storage-account "$storage" --runtime powershell --runtime-version 7.4 --functions-version 4 --os-type Linux
 az functionapp config appsettings set -g "$rg" -n "$functionapp" --settings AzureWebJobsStorage="DefaultEndpointsProtocol=https;AccountName=$storage;AccountKey=$accountKey;EndpointSuffix=core.windows.net" CosmosDBConnection="$cosmosConn"
 az monitor app-insights component create -g "$rg" -a "${functionapp}-ai" -l "$location"
 aiConnectionString=$(az monitor app-insights component show -g "$rg" -a "${functionapp}-ai" --query connectionString -o tsv)
