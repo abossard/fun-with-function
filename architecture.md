@@ -96,8 +96,15 @@ Use Azurite for local Storage emulation and the `generate-test` function to crea
 
 1. Start Azurite:
    - `npx azurite --location ./azurite --silent`
-2. Configure local settings (example):
-   - `AzureWebJobsStorage=UseDevelopmentStorage=true`
+2. Configure `local.settings.json` (example for PowerShell):
+   ```json
+   {
+     "IsEncrypted": false,
+     "Values": {
+       "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+       "FUNCTIONS_WORKER_RUNTIME": "powershell"
+     }
+   }
 3. Start Functions locally:
    - `func start --script-root FunctionApp`
 4. Generate a test payload:
