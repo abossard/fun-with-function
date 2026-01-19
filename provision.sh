@@ -25,6 +25,7 @@ pwsh -NoLogo -NoProfile -File ./fetch-modules.ps1
 
 echo "Managed identity..."
 uamiId=$(az identity create -g "$rg" -n "$uami" --query id -o tsv)
+uamiPrincipalId=$(az identity show -g "$rg" -n "$uami" --query principalId -o tsv)
 
 echo "Storage account..."
 az storage account create -g "$rg" -n "$storage" -l "$location" --sku Standard_LRS
@@ -32,6 +33,9 @@ accountKey=$(az storage account keys list -g "$rg" -n "$storage" --query "[0].va
 az storage container create --account-name "$storage" --account-key "$accountKey" -n emails
 az storage queue create --account-name "$storage" --account-key "$accountKey" -n "$queue"
 az storage queue create --account-name "$storage" --account-key "$accountKey" -n "$attachmentsQueue"
+echo "Assigning blob data roles to UAMI..."
+az role assignment create --assignee-object-id "$uamiPrincipalId" --assignee-principal-type ServicePrincipal --role "Storage Blob Data Contributor" --scope "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage"
+az role assignment create --assignee-object-id "$uamiPrincipalId" --assignee-principal-type ServicePrincipal --role "Storage Queue Data Contributor" --scope "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage"
 
 echo "Cosmos DB..."
 az cosmosdb create -g "$rg" -n "$cosmos" --kind GlobalDocumentDB --capabilities EnableServerless
