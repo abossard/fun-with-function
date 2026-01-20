@@ -145,6 +145,7 @@ Write-Host "Assigning storage data roles to signed-in user (for container/queue 
 $storageScope = "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage"
 Ensure-RoleAssignment -PrincipalId $signedInObjectId -Scope $storageScope -Role "Storage Blob Data Contributor" -PrincipalType "User"
 Ensure-RoleAssignment -PrincipalId $signedInObjectId -Scope $storageScope -Role "Storage Queue Data Contributor" -PrincipalType "User"
+Ensure-RoleAssignment -PrincipalId $signedInObjectId -Scope $storageScope -Role "Storage Queue Data Reader" -PrincipalType "User"
 
 Write-Host "Creating blob containers and queues..."
 Ensure-StorageContainer -AccountName $storage -Name emails
