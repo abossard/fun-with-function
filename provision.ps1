@@ -12,6 +12,61 @@ function Write-Phase {
   Write-Host "==============================="
 }
 
+function Ensure-RoleAssignment {
+  param(
+    [Parameter(Mandatory = $true)][string]$PrincipalId,
+    [Parameter(Mandatory = $true)][string]$Scope,
+    [Parameter(Mandatory = $true)][string]$Role
+  )
+  $existing = az role assignment list --assignee-object-id $PrincipalId --scope $Scope --query "[?roleDefinitionName=='$Role'] | length(@)" -o tsv
+  if ([int]$existing -eq 0) {
+    az role assignment create --assignee-object-id $PrincipalId --assignee-principal-type ServicePrincipal --role $Role --scope $Scope | Out-Null
+  } else {
+    Write-Host "Role '$Role' already assigned at scope."
+  }
+}
+
+function Ensure-StorageContainer {
+  param(
+    [Parameter(Mandatory = $true)][string]$AccountName,
+    [Parameter(Mandatory = $true)][string]$Name
+  )
+  $exists = az storage container exists --account-name $AccountName --auth-mode login -n $Name --query exists -o tsv
+  if ($exists -ne "true") {
+    az storage container create --account-name $AccountName --auth-mode login -n $Name | Out-Null
+  } else {
+    Write-Host "Container '$Name' already exists."
+  }
+}
+
+function Ensure-StorageQueue {
+  param(
+    [Parameter(Mandatory = $true)][string]$AccountName,
+    [Parameter(Mandatory = $true)][string]$Name
+  )
+  $exists = az storage queue exists --account-name $AccountName --auth-mode login -n $Name --query exists -o tsv
+  if ($exists -ne "true") {
+    az storage queue create --account-name $AccountName --auth-mode login -n $Name | Out-Null
+  } else {
+    Write-Host "Queue '$Name' already exists."
+  }
+}
+
+function Ensure-CosmosRoleAssignment {
+  param(
+    [Parameter(Mandatory = $true)][string]$ResourceGroup,
+    [Parameter(Mandatory = $true)][string]$AccountName,
+    [Parameter(Mandatory = $true)][string]$RoleDefinitionId,
+    [Parameter(Mandatory = $true)][string]$PrincipalId
+  )
+  $existing = az cosmosdb sql role assignment list -g $ResourceGroup -a $AccountName --query "[?principalId=='$PrincipalId' && roleDefinitionId=='$RoleDefinitionId'] | length(@)" -o tsv
+  if ([int]$existing -eq 0) {
+    az cosmosdb sql role assignment create -g $ResourceGroup -a $AccountName --role-definition-id $RoleDefinitionId --principal-id $PrincipalId --scope "/" | Out-Null
+  } else {
+    Write-Host "Cosmos DB role assignment already exists for principal."
+  }
+}
+
 if ($args.Count -ne 2) {
     Write-Host "Usage: ./provision.ps1 <name-prefix> <resource-group>"
     exit 1
@@ -57,7 +112,10 @@ Write-Host "Preparing local PowerShell modules for Flex (saved under FunctionApp
 
 Write-Phase "Identity setup"
 Write-Host "Creating user-assigned managed identity..."
-$uamiId = az identity create -g $rg -n $uami --query id -o tsv
+$uamiId = az identity show -g $rg -n $uami --query id -o tsv
+if (-not $uamiId) {
+  $uamiId = az identity create -g $rg -n $uami --query id -o tsv
+}
 $uamiPrincipalId = az identity show -g $rg -n $uami --query principalId -o tsv
 $uamiClientId = az identity show -g $rg -n $uami --query clientId -o tsv
 
@@ -66,43 +124,71 @@ $signedInObjectId = az ad signed-in-user show --query id -o tsv
 
 Write-Phase "Storage account"
 Write-Host "Creating storage account (shared key access disabled)..."
-az storage account create -g $rg -n $storage -l $location --sku Standard_LRS --allow-shared-key-access false
+$storageId = az storage account show -g $rg -n $storage --query id -o tsv
+if (-not $storageId) {
+  az storage account create -g $rg -n $storage -l $location --sku Standard_LRS --allow-shared-key-access false | Out-Null
+} else {
+  Write-Host "Storage account '$storage' already exists."
+}
 
 Write-Host "Assigning storage data roles to signed-in user (for container/queue creation)..."
 $storageScope = "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage"
-az role assignment create --assignee-object-id $signedInObjectId --assignee-principal-type User --role "Storage Blob Data Contributor" --scope $storageScope
-az role assignment create --assignee-object-id $signedInObjectId --assignee-principal-type User --role "Storage Queue Data Contributor" --scope $storageScope
+Ensure-RoleAssignment -PrincipalId $signedInObjectId -Scope $storageScope -Role "Storage Blob Data Contributor"
+Ensure-RoleAssignment -PrincipalId $signedInObjectId -Scope $storageScope -Role "Storage Queue Data Contributor"
 
 Write-Host "Creating blob containers and queues..."
-az storage container create --account-name $storage --auth-mode login -n emails
-az storage container create --account-name $storage --auth-mode login -n deployments
-az storage queue create --account-name $storage --auth-mode login -n $queue
-az storage queue create --account-name $storage --auth-mode login -n $attachmentsQueue
+Ensure-StorageContainer -AccountName $storage -Name emails
+Ensure-StorageContainer -AccountName $storage -Name deployments
+Ensure-StorageQueue -AccountName $storage -Name $queue
+Ensure-StorageQueue -AccountName $storage -Name $attachmentsQueue
 
 Write-Host "Assigning storage data roles to UAMI..."
-az role assignment create --assignee-object-id $uamiPrincipalId --assignee-principal-type ServicePrincipal --role "Storage Blob Data Contributor" --scope $storageScope
-az role assignment create --assignee-object-id $uamiPrincipalId --assignee-principal-type ServicePrincipal --role "Storage Queue Data Contributor" --scope $storageScope
+Ensure-RoleAssignment -PrincipalId $uamiPrincipalId -Scope $storageScope -Role "Storage Blob Data Contributor"
+Ensure-RoleAssignment -PrincipalId $uamiPrincipalId -Scope $storageScope -Role "Storage Queue Data Contributor"
 
 Write-Phase "Cosmos DB"
 Write-Host "Creating Cosmos DB account, database, and container..."
-az cosmosdb create -g $rg -n $cosmos --kind GlobalDocumentDB --capabilities EnableServerless
-az cosmosdb sql database create -g $rg -a $cosmos -n $database
-az cosmosdb sql container create -g $rg -a $cosmos -d $database -n $container --partition-key-path "/pk"
+$cosmosId = az cosmosdb show -g $rg -n $cosmos --query id -o tsv
+if (-not $cosmosId) {
+  az cosmosdb create -g $rg -n $cosmos --kind GlobalDocumentDB --capabilities EnableServerless | Out-Null
+} else {
+  Write-Host "Cosmos DB account '$cosmos' already exists."
+}
+
+$dbExists = az cosmosdb sql database show -g $rg -a $cosmos -n $database --query id -o tsv
+if (-not $dbExists) {
+  az cosmosdb sql database create -g $rg -a $cosmos -n $database | Out-Null
+} else {
+  Write-Host "Cosmos DB database '$database' already exists."
+}
+
+$containerExists = az cosmosdb sql container show -g $rg -a $cosmos -d $database -n $container --query id -o tsv
+if (-not $containerExists) {
+  az cosmosdb sql container create -g $rg -a $cosmos -d $database -n $container --partition-key-path "/pk" | Out-Null
+} else {
+  Write-Host "Cosmos DB container '$container' already exists."
+}
 $cosmosEndpoint = az cosmosdb show -g $rg -n $cosmos --query documentEndpoint -o tsv
 
 Write-Host "Assigning Cosmos DB data role to UAMI..."
 $cosmosRoleDefId = az cosmosdb sql role definition list -g $rg -a $cosmos --query "[?roleName=='Cosmos DB Built-in Data Contributor'].id" -o tsv
-az cosmosdb sql role assignment create -g $rg -a $cosmos --role-definition-id $cosmosRoleDefId --principal-id $uamiPrincipalId --scope "/"
+Ensure-CosmosRoleAssignment -ResourceGroup $rg -AccountName $cosmos -RoleDefinitionId $cosmosRoleDefId -PrincipalId $uamiPrincipalId
 Write-Host "Assigning Cosmos DB data role to signed-in user..."
-az cosmosdb sql role assignment create -g $rg -a $cosmos --role-definition-id $cosmosRoleDefId --principal-id $signedInObjectId --scope "/"
+Ensure-CosmosRoleAssignment -ResourceGroup $rg -AccountName $cosmos -RoleDefinitionId $cosmosRoleDefId -PrincipalId $signedInObjectId
 
 Write-Phase "Function App (Flex Consumption)"
 Write-Host "Creating Function App..."
-az functionapp create -g $rg -n $functionapp --storage-account $storage --flexconsumption-location $location --runtime powershell --runtime-version 7.4 --assign-identity $uamiId `
-  --deployment-storage-name $storage `
-  --deployment-storage-container-name deployments `
-  --deployment-storage-auth-type UserAssignedIdentity `
-  --deployment-storage-auth-value $uamiId
+$functionExists = az functionapp show -g $rg -n $functionapp --query id -o tsv
+if (-not $functionExists) {
+  az functionapp create -g $rg -n $functionapp --storage-account $storage --flexconsumption-location $location --runtime powershell --runtime-version 7.4 --assign-identity $uamiId `
+    --deployment-storage-name $storage `
+    --deployment-storage-container-name deployments `
+    --deployment-storage-auth-type UserAssignedIdentity `
+    --deployment-storage-auth-value $uamiId | Out-Null
+} else {
+  Write-Host "Function App '$functionapp' already exists. Ensuring identity assignment..."
+  az functionapp identity assign -g $rg -n $functionapp --identities $uamiId | Out-Null
+}
   
 Write-Host "Configuring app settings (managed identity auth for Storage and Cosmos DB)..."
 az functionapp config appsettings set -g $rg -n $functionapp --settings `
@@ -114,20 +200,32 @@ az functionapp config appsettings set -g $rg -n $functionapp --settings `
   "CosmosDBConnection__clientId=$uamiClientId"
 
 Write-Host "Creating Application Insights..."
-az monitor app-insights component create -g $rg -a "${functionapp}-ai" -l $location
-$aiConnectionString = az monitor app-insights component show -g $rg -a "${functionapp}-ai" --query connectionString -o tsv
+$aiName = "${functionapp}-ai"
+$aiExists = az monitor app-insights component show -g $rg -a $aiName --query id -o tsv
+if (-not $aiExists) {
+  az monitor app-insights component create -g $rg -a $aiName -l $location | Out-Null
+} else {
+  Write-Host "Application Insights '$aiName' already exists."
+}
+$aiConnectionString = az monitor app-insights component show -g $rg -a $aiName --query connectionString -o tsv
 az functionapp config appsettings set -g $rg -n $functionapp --settings "APPLICATIONINSIGHTS_CONNECTION_STRING=$aiConnectionString"
 
 Write-Phase "Event Grid"
 Write-Host "Creating Event Grid subscription with filters..."
-az eventgrid event-subscription create `
-  --name "${prefix}-egsub" `
-  --source-resource-id "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage" `
-  --endpoint-type storagequeue `
-  --queue-resource-id "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage/queueServices/default/queues/$attachmentsQueue" `
-  --included-event-types Microsoft.Storage.BlobCreated `
-  --subject-begins-with "/blobServices/default/containers/emails/blobs/emails/" `
-  --subject-ends-with "/attachments/"
+$egSubName = "${prefix}-egsub"
+$egExists = az eventgrid event-subscription show --name $egSubName --source-resource-id "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage" --query id -o tsv
+if (-not $egExists) {
+  az eventgrid event-subscription create `
+    --name $egSubName `
+    --source-resource-id "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage" `
+    --endpoint-type storagequeue `
+    --queue-resource-id "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage/queueServices/default/queues/$attachmentsQueue" `
+    --included-event-types Microsoft.Storage.BlobCreated `
+    --subject-begins-with "/blobServices/default/containers/emails/blobs/emails/" `
+    --subject-ends-with "/attachments/" | Out-Null
+} else {
+  Write-Host "Event Grid subscription '$egSubName' already exists."
+}
 
 Write-Phase "Next steps"
 Write-Host "Logic App placeholder (manual build in portal): $logicapp"
