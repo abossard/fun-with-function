@@ -15,7 +15,7 @@ try {
 } catch { }
 
 foreach ($m in $Modules) {
-    Save-Module -Name $m -Path $ModulePath -Force -AllowPrerelease:$false
+    Save-Module -Name $m -Path $ModulePath -Force
 }
 
 Write-Host "Modules saved to $ModulePath"
