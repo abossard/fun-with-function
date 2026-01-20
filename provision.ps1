@@ -217,6 +217,9 @@ az functionapp config appsettings set -g $rg -n $functionapp --settings `
   "CosmosDBConnection__credential=managedidentity" `
   "CosmosDBConnection__clientId=$uamiClientId"
 
+Write-Host "Removing any key-based Storage settings (if present)..."
+az functionapp config appsettings delete -g $rg -n $functionapp --setting-names AzureWebJobsStorage AzureWebJobsStorage__connectionString WEBSITE_CONTENTAZUREFILECONNECTIONSTRING WEBSITE_CONTENTSHARE | Out-Null
+
 Write-Host "Creating Application Insights..."
 $aiName = "${functionapp}-ai"
 $aiExists = az monitor app-insights component show -g $rg -a $aiName --query id -o tsv
@@ -227,6 +230,9 @@ if (-not $aiExists) {
 }
 $aiConnectionString = az monitor app-insights component show -g $rg -a $aiName --query connectionString -o tsv
 az functionapp config appsettings set -g $rg -n $functionapp --settings "APPLICATIONINSIGHTS_CONNECTION_STRING=$aiConnectionString"
+
+Write-Host "Ensuring CORS allows Azure Portal..."
+az functionapp cors add -g $rg -n $functionapp --allowed-origins "https://portal.azure.com" | Out-Null
 
 Write-Phase "Event Grid"
 Write-Host "Creating Event Grid subscription with filters..."

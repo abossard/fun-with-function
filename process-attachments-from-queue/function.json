@@ -1,0 +1,21 @@
+{
+  "bindings": [
+    {
+      "name": "QueueItem",
+      "type": "queueTrigger",
+      "direction": "in",
+      "queueName": "hr-attachments-q",
+      "connection": "AzureWebJobsStorage"
+    },
+    {
+      "name": "cosmosDoc",
+      "type": "cosmosDB",
+      "direction": "out",
+      "databaseName": "hrdb",
+      "collectionName": "emails",
+      "createIfNotExists": true,
+      "connection": "CosmosDBConnection"
+    }
+  ],
+  "scriptFile": "run.ps1"
+}
