@@ -4,7 +4,7 @@
       "name": "metadata",
       "type": "blobTrigger",
       "direction": "in",
-      "path": "emails/{correlationId}/metadata.json",
+      "path": "emails/metadata/{correlationId}/metadata.json",
       "source": "EventGrid",
       "connection": "AzureWebJobsStorage"
     },

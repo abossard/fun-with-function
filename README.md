@@ -31,8 +31,8 @@ flowchart LR
 
 ### Function folders
 - `S0-generate-test`: HTTP trigger to generate test metadata + attachment blobs and enqueue a BlobCreated CloudEvent.
-- `S1-process-attachments`: Queue trigger to process attachment events and write a Cosmos DB record.
-- `S2-mail-metadata-from-blob`: Blob trigger to read metadata.json and write a Cosmos DB record.
+- `process-attachments-from-queue`: Queue trigger to process attachment events and write a Cosmos DB record.
+- `process-mail-metadata-from-blob`: Blob trigger to read metadata.json and write a Cosmos DB record.
 
 ## Run locally
 ### Prerequisites

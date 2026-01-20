@@ -249,8 +249,9 @@ if (-not $egExists) {
     --endpoint-type storagequeue `
     --endpoint $queueResourceId `
     --included-event-types Microsoft.Storage.BlobCreated `
-    --subject-begins-with "/blobServices/default/containers/emails/blobs/emails/" `
-    --subject-ends-with "/attachments/" | Out-Null
+    --subject-begins-with "/blobServices/default/containers/emails/blobs/attachments/" `
+    --advanced-filter data.api StringIn PutBlockList `
+    --event-delivery-schema cloudeventschemav1_0 | Out-Null
 } else {
   Write-Host "Event Grid subscription '$egSubName' already exists."
 }

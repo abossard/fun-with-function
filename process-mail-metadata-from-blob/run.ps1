@@ -15,7 +15,7 @@ try {
 }
 
 $correlationId = $null
-if ($TriggerMetadata.BlobTrigger -match "emails/([^/]+)/metadata.json") {
+if ($TriggerMetadata.BlobTrigger -match "emails/metadata/([^/]+)/metadata.json") {
     $correlationId = $matches[1]
 }
 
@@ -28,7 +28,6 @@ $doc = [pscustomobject]@{
     subject            = $parsed.subject
     receivedTime       = $parsed.receivedTime
     hasAttachments     = $parsed.hasAttachments
-    attachmentBlobPaths= $parsed.attachmentBlobPaths
     messageId          = $parsed.messageId
     createdAt          = (Get-Date).ToString("o")
 }
