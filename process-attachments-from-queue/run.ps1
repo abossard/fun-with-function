@@ -33,10 +33,20 @@ if (-not $blobUrl) {
 }
 
 Write-Host "Attachment event received: $blobUrl"
-
+# https://anb99storage.blob.core.windows.net/emails/attachments/333333333333/fake.txt
 $correlationId = $null
 if ($blobUrl -match "/emails/attachments/([^/]+)/") {
 	$correlationId = $matches[1]
+} elseif ($blobUrl -match "/attachments/([^/]+)/") {
+	# Fallback if path omits leading 'emails/'
+	$correlationId = $matches[1]
+} elseif ($blobUrl -match "/emails/([^/]+)/attachments/") {
+	# Legacy pattern emails/{cid}/attachments/
+	$correlationId = $matches[1]
+}
+
+if (-not $correlationId) {
+	Write-Warning "Unable to extract correlationId from blob url: $blobUrl"
 }
 
 $doc = [pscustomobject]@{
