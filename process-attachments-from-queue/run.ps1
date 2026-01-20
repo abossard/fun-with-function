@@ -58,4 +58,12 @@ $doc = [pscustomobject]@{
 	processedAt   = (Get-Date).ToString("o")
 }
 
+Start-Sleep -Seconds 120
+# have a 10% chance to simulate failure
+$rand = Get-Random -Minimum 1 -Maximum 6
+if ($rand -eq 1) {
+	Write-Error "Simulated random processing failure."
+	return
+}
+
 Push-OutputBinding -Name cosmosDoc -Value $doc
