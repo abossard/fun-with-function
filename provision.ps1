@@ -112,19 +112,19 @@ Write-Host "Preparing local PowerShell modules for Flex (saved under FunctionApp
 
 Write-Phase "Identity setup"
 Write-Host "Creating user-assigned managed identity..."
-$uamiId = az identity show -g $rg -n $uami --query id -o tsv
+$uamiId = az identity show -g $rg -n $uami --query id -o tsv 2>$null
 if (-not $uamiId) {
   $uamiId = az identity create -g $rg -n $uami --query id -o tsv
 }
-$uamiPrincipalId = az identity show -g $rg -n $uami --query principalId -o tsv
-$uamiClientId = az identity show -g $rg -n $uami --query clientId -o tsv
+$uamiPrincipalId = az identity show -g $rg -n $uami --query principalId -o tsv 2>$null
+$uamiClientId = az identity show -g $rg -n $uami --query clientId -o tsv 2>$null
 
 $subscriptionId = az account show --query id -o tsv
 $signedInObjectId = az ad signed-in-user show --query id -o tsv
 
 Write-Phase "Storage account"
 Write-Host "Creating storage account (shared key access disabled)..."
-$storageId = az storage account show -g $rg -n $storage --query id -o tsv
+$storageId = az storage account show -g $rg -n $storage --query id -o tsv 2>$null
 if (-not $storageId) {
   az storage account create -g $rg -n $storage -l $location --sku Standard_LRS --allow-shared-key-access false | Out-Null
 } else {
@@ -132,7 +132,7 @@ if (-not $storageId) {
 }
 
 Write-Host "Ensuring storage public network access is enabled..."
-$storagePublicAccess = az storage account show -g $rg -n $storage --query publicNetworkAccess -o tsv
+$storagePublicAccess = az storage account show -g $rg -n $storage --query publicNetworkAccess -o tsv 2>$null
 if ($storagePublicAccess -ne "Enabled") {
   az storage account update -g $rg -n $storage --public-network-access Enabled | Out-Null
   Write-Host "Storage public network access enabled."
@@ -157,7 +157,7 @@ Ensure-RoleAssignment -PrincipalId $uamiPrincipalId -Scope $storageScope -Role "
 
 Write-Phase "Cosmos DB"
 Write-Host "Creating Cosmos DB account, database, and container..."
-$cosmosId = az cosmosdb show -g $rg -n $cosmos --query id -o tsv
+$cosmosId = az cosmosdb show -g $rg -n $cosmos --query id -o tsv 2>$null
 if (-not $cosmosId) {
   az cosmosdb create -g $rg -n $cosmos --kind GlobalDocumentDB --capabilities EnableServerless | Out-Null
 } else {
@@ -165,7 +165,7 @@ if (-not $cosmosId) {
 }
 
 Write-Host "Ensuring Cosmos DB public network access is enabled..."
-$cosmosPublicAccess = az cosmosdb show -g $rg -n $cosmos --query publicNetworkAccess -o tsv
+$cosmosPublicAccess = az cosmosdb show -g $rg -n $cosmos --query publicNetworkAccess -o tsv 2>$null
 if ($cosmosPublicAccess -ne "Enabled") {
   az cosmosdb update -g $rg -n $cosmos --public-network-access Enabled | Out-Null
   Write-Host "Cosmos DB public network access enabled."
@@ -173,30 +173,30 @@ if ($cosmosPublicAccess -ne "Enabled") {
   Write-Host "Cosmos DB public network access already enabled."
 }
 
-$dbExists = az cosmosdb sql database show -g $rg -a $cosmos -n $database --query id -o tsv
+$dbExists = az cosmosdb sql database show -g $rg -a $cosmos -n $database --query id -o tsv 2>$null
 if (-not $dbExists) {
   az cosmosdb sql database create -g $rg -a $cosmos -n $database | Out-Null
 } else {
   Write-Host "Cosmos DB database '$database' already exists."
 }
 
-$containerExists = az cosmosdb sql container show -g $rg -a $cosmos -d $database -n $container --query id -o tsv
+$containerExists = az cosmosdb sql container show -g $rg -a $cosmos -d $database -n $container --query id -o tsv 2>$null
 if (-not $containerExists) {
   az cosmosdb sql container create -g $rg -a $cosmos -d $database -n $container --partition-key-path "/pk" | Out-Null
 } else {
   Write-Host "Cosmos DB container '$container' already exists."
 }
-$cosmosEndpoint = az cosmosdb show -g $rg -n $cosmos --query documentEndpoint -o tsv
+$cosmosEndpoint = az cosmosdb show -g $rg -n $cosmos --query documentEndpoint -o tsv 2>$null
 
 Write-Host "Assigning Cosmos DB data role to UAMI..."
-$cosmosRoleDefId = az cosmosdb sql role definition list -g $rg -a $cosmos --query "[?roleName=='Cosmos DB Built-in Data Contributor'].id" -o tsv
+$cosmosRoleDefId = az cosmosdb sql role definition list -g $rg -a $cosmos --query "[?roleName=='Cosmos DB Built-in Data Contributor'].id" -o tsv 2>$null
 Ensure-CosmosRoleAssignment -ResourceGroup $rg -AccountName $cosmos -RoleDefinitionId $cosmosRoleDefId -PrincipalId $uamiPrincipalId
 Write-Host "Assigning Cosmos DB data role to signed-in user..."
 Ensure-CosmosRoleAssignment -ResourceGroup $rg -AccountName $cosmos -RoleDefinitionId $cosmosRoleDefId -PrincipalId $signedInObjectId
 
 Write-Phase "Function App (Flex Consumption)"
 Write-Host "Creating Function App..."
-$functionExists = az functionapp show -g $rg -n $functionapp --query id -o tsv
+$functionExists = az functionapp show -g $rg -n $functionapp --query id -o tsv 2>$null
 if (-not $functionExists) {
   az functionapp create -g $rg -n $functionapp --storage-account $storage --flexconsumption-location $location --runtime powershell --runtime-version 7.4 --assign-identity $uamiId `
     --deployment-storage-name $storage `
@@ -222,13 +222,13 @@ az functionapp config appsettings delete -g $rg -n $functionapp --setting-names 
 
 Write-Host "Creating Application Insights..."
 $aiName = "${functionapp}-ai"
-$aiExists = az monitor app-insights component show -g $rg -a $aiName --query id -o tsv
+$aiExists = az monitor app-insights component show -g $rg -a $aiName --query id -o tsv 2>$null
 if (-not $aiExists) {
   az monitor app-insights component create -g $rg -a $aiName -l $location | Out-Null
 } else {
   Write-Host "Application Insights '$aiName' already exists."
 }
-$aiConnectionString = az monitor app-insights component show -g $rg -a $aiName --query connectionString -o tsv
+$aiConnectionString = az monitor app-insights component show -g $rg -a $aiName --query connectionString -o tsv 2>$null
 az functionapp config appsettings set -g $rg -n $functionapp --settings "APPLICATIONINSIGHTS_CONNECTION_STRING=$aiConnectionString"
 
 Write-Host "Ensuring CORS allows Azure Portal..."
@@ -237,7 +237,7 @@ az functionapp cors add -g $rg -n $functionapp --allowed-origins "https://portal
 Write-Phase "Event Grid"
 Write-Host "Creating Event Grid subscription with filters..."
 $egSubName = "${prefix}-egsub"
-$egExists = az eventgrid event-subscription show --name $egSubName --source-resource-id "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage" --query id -o tsv
+$egExists = az eventgrid event-subscription show --name $egSubName --source-resource-id "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage" --query id -o tsv 2>$null
 if (-not $egExists) {
   $queueResourceId = "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage/queueServices/default/queues/$attachmentsQueue"
   az eventgrid event-subscription create `
