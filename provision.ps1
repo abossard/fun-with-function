@@ -238,7 +238,7 @@ az functionapp cors add -g $rg -n $functionapp --allowed-origins "https://portal
 
 Write-Phase "Event Grid"
 Write-Host "Creating Event Grid subscription with filters..."
-$egSubName = "${prefix}-egsub"
+$egSubName = "${prefix}-egsub-attachments"
 $egExists = az eventgrid event-subscription show --name $egSubName --source-resource-id "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage" --query id -o tsv 2>$null
 if (-not $egExists) {
   $queueResourceId = "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage/queueServices/default/queues/$attachmentsQueue"
@@ -252,6 +252,22 @@ if (-not $egExists) {
     --subject-ends-with "/attachments/" | Out-Null
 } else {
   Write-Host "Event Grid subscription '$egSubName' already exists."
+}
+
+$egFuncSubName = "${prefix}-egsub-metadata-func"
+$egFuncExists = az eventgrid event-subscription show --name $egFuncSubName --source-resource-id "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage" --query id -o tsv 2>$null
+if (-not $egFuncExists) {
+  $funcEndpoint = "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Web/sites/$functionapp/functions/process-mail-metadata-from-blob"
+  az eventgrid event-subscription create `
+    --name $egFuncSubName `
+    --source-resource-id "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage" `
+    --endpoint-type azurefunction `
+    --endpoint $funcEndpoint `
+    --included-event-types Microsoft.Storage.BlobCreated `
+    --subject-begins-with "/blobServices/default/containers/emails/blobs/emails/" `
+    --subject-ends-with "/metadata.json" | Out-Null
+} else {
+  Write-Host "Event Grid subscription '$egFuncSubName' already exists."
 }
 
 Write-Phase "Next steps"

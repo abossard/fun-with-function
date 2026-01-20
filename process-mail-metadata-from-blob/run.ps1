@@ -1,61 +1,35 @@
-param($eventGridEvent, $TriggerMetadata)
+param($metadata, $TriggerMetadata)
 
-Write-Host "Raw Event Grid event: $eventGridEvent"
-try {
-    $evt = $eventGridEvent | ConvertFrom-Json
-} catch {
-    Write-Warning "Event Grid payload is not JSON; skipping. Error: $_"
-    return
-}
+Write-Host "Blob trigger path: $($TriggerMetadata.BlobTrigger)"
 
-# Handle array vs single event payloads
-$payload = if ($evt -is [System.Array]) { $evt[0] } else { $evt }
-if (-not $payload.data) {
-    Write-Warning "Event Grid payload missing data; skipping."
-    return
-}
-
-# Expect data.url to point to the metadata blob
-$metadataUrl = $payload.data.url
-if (-not $metadataUrl) {
-    Write-Warning "Event Grid payload missing data.url; skipping."
-    return
-}
-
-# Derive correlationId from the blob path emails/{cid}/metadata.json
-$correlationId = $null
-if ($metadataUrl -match "/emails/([^/]+)/metadata.json") {
-    $correlationId = $matches[1]
-}
-
-# Fetch the blob content using managed identity auth via Az.Storage module
-try {
-    $ctx = (Get-AzStorageAccount -Name $env:AzureWebJobsStorage__accountName -ResourceGroupName $env:WEBSITE_RESOURCE_GROUP).Context
-    $blob = Get-AzStorageBlobContent -Container "emails" -Blob "${correlationId}/metadata.json" -Context $ctx -Force -ErrorAction Stop
-    $metadataJson = Get-Content $blob.Name -Raw
-} catch {
-    Write-Warning "Failed to read metadata blob for $correlationId: $_"
+if (-not $metadata) {
+    Write-Warning "Metadata blob is empty; skipping."
     return
 }
 
 try {
-    $metadata = $metadataJson | ConvertFrom-Json
+    $parsed = $metadata | ConvertFrom-Json
 } catch {
     Write-Warning "Metadata blob is not valid JSON; skipping. Error: $_"
     return
 }
 
+$correlationId = $null
+if ($TriggerMetadata.BlobTrigger -match "emails/([^/]+)/metadata.json") {
+    $correlationId = $matches[1]
+}
+
 $doc = [pscustomobject]@{
-    id                 = $metadata.messageId
-    pk                 = $metadata.fromEmail
-    correlationId      = $metadata.correlationId
-    fromEmail          = $metadata.fromEmail
-    fromName           = $metadata.fromName
-    subject            = $metadata.subject
-    receivedTime       = $metadata.receivedTime
-    hasAttachments     = $metadata.hasAttachments
-    attachmentBlobPaths= $metadata.attachmentBlobPaths
-    messageId          = $metadata.messageId
+    id                 = $parsed.messageId
+    pk                 = $parsed.fromEmail
+    correlationId      = $parsed.correlationId
+    fromEmail          = $parsed.fromEmail
+    fromName           = $parsed.fromName
+    subject            = $parsed.subject
+    receivedTime       = $parsed.receivedTime
+    hasAttachments     = $parsed.hasAttachments
+    attachmentBlobPaths= $parsed.attachmentBlobPaths
+    messageId          = $parsed.messageId
     createdAt          = (Get-Date).ToString("o")
 }
 
