@@ -73,8 +73,8 @@ if ($args.Count -ne 2) {
     exit 1
 }
 
-$prefix = $args[0]
-$rg = $args[1]
+$prefix = $args[0] | ToLower
+$rg = $args[1] | ToLower
 $location = "swedencentral"
 $storage = "${prefix}storage"
 $attachmentsQueue = "hr-attachments-q"
