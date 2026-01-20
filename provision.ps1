@@ -254,6 +254,31 @@ if (-not $egExists) {
   Write-Host "Event Grid subscription '$egSubName' already exists."
 }
 
+Write-Host "Creating Event Grid webhook subscription for metadata blob trigger..."
+$egMetaSubName = "${prefix}-egsub-metadata"
+$egMetaExists = az eventgrid event-subscription show --name $egMetaSubName --source-resource-id "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage" --query id -o tsv 2>$null
+if (-not $egMetaExists) {
+  $functionHost = az functionapp show -g $rg -n $functionapp --query defaultHostName -o tsv
+  # Use host master key for Event Grid webhook
+  $functionKey = az functionapp keys list -g $rg -n $functionapp --query "masterKey" -o tsv 2>$null
+  if (-not $functionKey) {
+    Write-Warning "process-mail-metadata-from-blob function key not found; deploy the function code first, then rerun provisioning to create the Event Grid subscription. Skipping metadata subscription."
+  } else {
+    $webhookEndpoint = "https://$functionHost/runtime/webhooks/EventGrid?functionName=process-mail-metadata-from-blob&code=$functionKey"
+    az eventgrid event-subscription create `
+      --name $egMetaSubName `
+      --source-resource-id "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage" `
+      --endpoint-type webhook `
+      --endpoint $webhookEndpoint `
+      --included-event-types Microsoft.Storage.BlobCreated `
+      --subject-begins-with "/blobServices/default/containers/emails/blobs/metadata/" `
+      --advanced-filter data.api StringIn PutBlockList `
+      --event-delivery-schema eventgridschema | Out-Null
+  }
+} else {
+  Write-Host "Event Grid subscription '$egMetaSubName' already exists."
+}
+
 
 
 Write-Phase "Next steps"
