@@ -4,6 +4,7 @@ Example on how to use the Azure Integration Services
 # Installation and usage
 - install AZ CLI, e.g. in Windows: `winget install --exact --id Microsoft.AzureCLI`
 - ./provision.ps1 <name-prefix> <resource-group>
+- Install-Module PowerShellGet -Scope CurrentUser -Force -AllowClobber
 
 ## Architecture overview
 - Logic App (Consumption) ingests emails, writes metadata + attachments to Blob Storage under `emails/{correlationId}/`.
