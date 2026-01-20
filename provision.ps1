@@ -156,6 +156,7 @@ Ensure-StorageQueue -AccountName $storage -Name $attachmentsQueue
 Write-Host "Assigning storage data roles to UAMI..."
 Ensure-RoleAssignment -PrincipalId $uamiPrincipalId -Scope $storageScope -Role "Storage Blob Data Contributor"
 Ensure-RoleAssignment -PrincipalId $uamiPrincipalId -Scope $storageScope -Role "Storage Queue Data Contributor"
+Ensure-RoleAssignment -PrincipalId $uamiPrincipalId -Scope $storageScope -Role "EventGrid EventSubscription Contributor"
 
 Write-Phase "Cosmos DB"
 Write-Host "Creating Cosmos DB account, database, and container..."
