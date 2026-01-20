@@ -16,11 +16,12 @@ function Ensure-RoleAssignment {
   param(
     [Parameter(Mandatory = $true)][string]$PrincipalId,
     [Parameter(Mandatory = $true)][string]$Scope,
-    [Parameter(Mandatory = $true)][string]$Role
+    [Parameter(Mandatory = $true)][string]$Role,
+    [string]$PrincipalType = "ServicePrincipal"
   )
   $existing = az role assignment list --assignee-object-id $PrincipalId --scope $Scope --query "[?roleDefinitionName=='$Role'] | length(@)" -o tsv
   if ([int]$existing -eq 0) {
-    az role assignment create --assignee-object-id $PrincipalId --assignee-principal-type ServicePrincipal --role $Role --scope $Scope | Out-Null
+    az role assignment create --assignee-object-id $PrincipalId --assignee-principal-type $PrincipalType --role $Role --scope $Scope | Out-Null
   } else {
     Write-Host "Role '$Role' already assigned at scope."
   }
@@ -142,8 +143,8 @@ if ($storagePublicAccess -ne "Enabled") {
 
 Write-Host "Assigning storage data roles to signed-in user (for container/queue creation)..."
 $storageScope = "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage"
-Ensure-RoleAssignment -PrincipalId $signedInObjectId -Scope $storageScope -Role "Storage Blob Data Contributor"
-Ensure-RoleAssignment -PrincipalId $signedInObjectId -Scope $storageScope -Role "Storage Queue Data Contributor"
+Ensure-RoleAssignment -PrincipalId $signedInObjectId -Scope $storageScope -Role "Storage Blob Data Contributor" -PrincipalType "User"
+Ensure-RoleAssignment -PrincipalId $signedInObjectId -Scope $storageScope -Role "Storage Queue Data Contributor" -PrincipalType "User"
 
 Write-Host "Creating blob containers and queues..."
 Ensure-StorageContainer -AccountName $storage -Name emails

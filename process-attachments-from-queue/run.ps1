@@ -1,8 +1,25 @@
 param($QueueItem, $TriggerMetadata)
 
-$evt = $QueueItem | ConvertFrom-Json
-$data = $evt.data
-$blobUrl = $data.url
+Write-Host "Raw queue item: $QueueItem"
+try {
+	$parsed = $QueueItem | ConvertFrom-Json
+} catch {
+	Write-Warning "Queue item is not valid JSON; skipping. Error: $_"
+	return
+}
+
+$evt = if ($parsed -is [System.Array]) { $parsed[0] } else { $parsed }
+if (-not $evt.data) {
+	Write-Warning "Event missing data payload; skipping."
+	return
+}
+
+$blobUrl = $evt.data.url
+if (-not $blobUrl) {
+	Write-Warning "Event missing blob url; skipping."
+	return
+}
+
 Write-Host "Attachment event received: $blobUrl"
 
 $correlationId = $null

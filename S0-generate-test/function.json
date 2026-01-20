@@ -9,11 +9,6 @@
       "route": "test/generate/{correlationId}"
     },
     {
-      "type": "http",
-      "direction": "out",
-      "name": "Response"
-    },
-    {
       "name": "metadataBlob",
       "type": "blob",
       "direction": "out",
@@ -25,13 +20,6 @@
       "type": "blob",
       "direction": "out",
       "path": "emails/{correlationId}/attachments/fake.txt",
-      "connection": "AzureWebJobsStorage"
-    },
-    {
-      "name": "queueMsg",
-      "type": "queue",
-      "direction": "out",
-      "queueName": "hr-attachments-q",
       "connection": "AzureWebJobsStorage"
     }
   ]

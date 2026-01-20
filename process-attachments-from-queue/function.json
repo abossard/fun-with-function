@@ -12,7 +12,7 @@
       "type": "cosmosDB",
       "direction": "out",
       "databaseName": "hrdb",
-      "collectionName": "emails",
+      "containerName": "emails",
       "createIfNotExists": true,
       "connection": "CosmosDBConnection"
     }
