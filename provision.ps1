@@ -108,7 +108,7 @@ if (-not ($flexRegions -split "\s+" | Where-Object { $_ -eq $location })) {
 
 Write-Phase "Local dependencies"
 Write-Host "Preparing local PowerShell modules for Flex (saved under FunctionApp/modules)..."
-& pwsh -NoLogo -NoProfile -File ./fetch-modules.ps1
+& ./fetch-modules.ps1
 
 Write-Phase "Identity setup"
 Write-Host "Creating user-assigned managed identity..."

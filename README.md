@@ -1,6 +1,10 @@
 # fun-with-function
 Example on how to use the Azure Integration Services
 
+# Installation and usage
+- install AZ CLI, e.g. in Windows: `winget install --exact --id Microsoft.AzureCLI`
+- ./provision.ps1 <name-prefix> <resource-group>
+
 ## Architecture overview
 - Logic App (Consumption) ingests emails, writes metadata + attachments to Blob Storage under `emails/{correlationId}/`.
 - Blob-triggered Function (Flex Consumption, PowerShell 7.4) fires only for `emails/{correlationId}/metadata.json` and writes Cosmos DB docs (pk = sender email `/pk`).
