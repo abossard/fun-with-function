@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "SilentlyContinue"
 
 function Write-Phase {
   param(
