@@ -223,17 +223,6 @@ az functionapp config appsettings set -g $rg -n $functionapp --settings `
 Write-Host "Removing any key-based Storage settings (if present)..."
 az functionapp config appsettings delete -g $rg -n $functionapp --setting-names AzureWebJobsStorage AzureWebJobsStorage__connectionString WEBSITE_CONTENTAZUREFILECONNECTIONSTRING WEBSITE_CONTENTSHARE | Out-Null
 
-Write-Host "Creating Application Insights..."
-$aiName = "${functionapp}-ai"
-$aiExists = az monitor app-insights component show -g $rg -a $aiName --query id -o tsv 2>$null
-if (-not $aiExists) {
-  az monitor app-insights component create -g $rg -a $aiName -l $location | Out-Null
-} else {
-  Write-Host "Application Insights '$aiName' already exists."
-}
-$aiConnectionString = az monitor app-insights component show -g $rg -a $aiName --query connectionString -o tsv 2>$null
-az functionapp config appsettings set -g $rg -n $functionapp --settings "APPLICATIONINSIGHTS_CONNECTION_STRING=$aiConnectionString"
-
 Write-Host "Ensuring CORS allows Azure Portal..."
 az functionapp cors add -g $rg -n $functionapp --allowed-origins "https://portal.azure.com" | Out-Null
 
@@ -255,6 +244,17 @@ if (-not $egExists) {
 } else {
   Write-Host "Event Grid subscription '$egSubName' already exists."
 }
+
+Write-Host "Creating Application Insights..."
+$aiName = "${functionapp}-ai"
+$aiExists = az monitor app-insights component show -g $rg -a $aiName --query id -o tsv 2>$null
+if (-not $aiExists) {
+  az monitor app-insights component create -g $rg -a $aiName -l $location | Out-Null
+} else {
+  Write-Host "Application Insights '$aiName' already exists."
+}
+$aiConnectionString = az monitor app-insights component show -g $rg -a $aiName --query connectionString -o tsv 2>$null
+az functionapp config appsettings set -g $rg -n $functionapp --settings "APPLICATIONINSIGHTS_CONNECTION_STRING=$aiConnectionString"
 
 Write-Phase "Next steps"
 Write-Host "Logic App placeholder (manual build in portal): $logicapp"
