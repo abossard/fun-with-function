@@ -16,7 +16,7 @@ Email --> Logic App --> Blob Storage (metadata.json + attachments)
 ## Visual overview (Mermaid)
 ```mermaid
 flowchart LR
-    Email[Incoming email] --> LogicApp[Logic App<br/>"When a new email arrives"]
+   Email[Incoming email] --> LogicApp[Logic App<br/>When a new email arrives]
     LogicApp -->|metadata.json + attachments| Blob[(Blob Storage)]
     Blob -->|metadata.json| BlobTrigger[Blob-triggered Function]
     BlobTrigger --> Cosmos[(Cosmos DB)]

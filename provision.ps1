@@ -131,6 +131,15 @@ if (-not $storageId) {
   Write-Host "Storage account '$storage' already exists."
 }
 
+Write-Host "Ensuring storage public network access is enabled..."
+$storagePublicAccess = az storage account show -g $rg -n $storage --query publicNetworkAccess -o tsv
+if ($storagePublicAccess -ne "Enabled") {
+  az storage account update -g $rg -n $storage --public-network-access Enabled | Out-Null
+  Write-Host "Storage public network access enabled."
+} else {
+  Write-Host "Storage public network access already enabled."
+}
+
 Write-Host "Assigning storage data roles to signed-in user (for container/queue creation)..."
 $storageScope = "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage"
 Ensure-RoleAssignment -PrincipalId $signedInObjectId -Scope $storageScope -Role "Storage Blob Data Contributor"
@@ -153,6 +162,15 @@ if (-not $cosmosId) {
   az cosmosdb create -g $rg -n $cosmos --kind GlobalDocumentDB --capabilities EnableServerless | Out-Null
 } else {
   Write-Host "Cosmos DB account '$cosmos' already exists."
+}
+
+Write-Host "Ensuring Cosmos DB public network access is enabled..."
+$cosmosPublicAccess = az cosmosdb show -g $rg -n $cosmos --query publicNetworkAccess -o tsv
+if ($cosmosPublicAccess -ne "Enabled") {
+  az cosmosdb update -g $rg -n $cosmos --public-network-access Enabled | Out-Null
+  Write-Host "Cosmos DB public network access enabled."
+} else {
+  Write-Host "Cosmos DB public network access already enabled."
 }
 
 $dbExists = az cosmosdb sql database show -g $rg -a $cosmos -n $database --query id -o tsv
@@ -215,11 +233,12 @@ Write-Host "Creating Event Grid subscription with filters..."
 $egSubName = "${prefix}-egsub"
 $egExists = az eventgrid event-subscription show --name $egSubName --source-resource-id "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage" --query id -o tsv
 if (-not $egExists) {
+  $queueResourceId = "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage/queueServices/default/queues/$attachmentsQueue"
   az eventgrid event-subscription create `
     --name $egSubName `
     --source-resource-id "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage" `
     --endpoint-type storagequeue `
-    --queue-resource-id "/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Storage/storageAccounts/$storage/queueServices/default/queues/$attachmentsQueue" `
+    --endpoint $queueResourceId `
     --included-event-types Microsoft.Storage.BlobCreated `
     --subject-begins-with "/blobServices/default/containers/emails/blobs/emails/" `
     --subject-ends-with "/attachments/" | Out-Null

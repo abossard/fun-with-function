@@ -1,5 +1,5 @@
 param(
-    [string]$ModulePath = "FunctionApp/modules",
+    [string]$ModulePath = "modules",
     [string[]]$Modules = @("Az.Accounts", "Az.Storage", "Az.CosmosDB")
 )
 
