@@ -6,8 +6,6 @@ if (-not $correlationId) { $correlationId = "test-" + ([guid]::NewGuid().ToStrin
 
 $cid = $correlationId
 $now = (Get-Date).ToString("o")
-$attachmentPath = "emails/attachments/$cid/fake.txt"
-$metadataPath = "emails/metadata/$cid/metadata.json"
 
 $metadata = [pscustomobject]@{
     correlationId     = $cid

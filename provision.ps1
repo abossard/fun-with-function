@@ -77,7 +77,6 @@ $prefix = $args[0]
 $rg = $args[1]
 $location = "swedencentral"
 $storage = "${prefix}storage"
-$queue = "hr-ingest-q"
 $attachmentsQueue = "hr-attachments-q"
 $functionapp = "${prefix}-func"
 $cosmos = "${prefix}-cosmos"
@@ -150,7 +149,6 @@ Ensure-RoleAssignment -PrincipalId $signedInObjectId -Scope $storageScope -Role 
 Write-Host "Creating blob containers and queues..."
 Ensure-StorageContainer -AccountName $storage -Name emails
 Ensure-StorageContainer -AccountName $storage -Name deployments
-Ensure-StorageQueue -AccountName $storage -Name $queue
 Ensure-StorageQueue -AccountName $storage -Name $attachmentsQueue
 
 Write-Host "Assigning storage data roles to UAMI..."
