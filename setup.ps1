@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     Uses Azure PowerShell to manage infrastructure as a deployment stack.
-    Supports create/update and delete operations.
+    Supports create/update, delete, and code deployment operations.
 
 .PARAMETER Prefix
     Name prefix for all resources (3-11 chars, lowercase).
@@ -19,8 +19,20 @@
 .PARAMETER Delete
     If specified, deletes the stack and all resources.
 
+.PARAMETER Deploy
+    If specified, deploys function code after infrastructure.
+
+.PARAMETER DeployOnly
+    If specified, only deploys function code (skips infrastructure).
+
 .EXAMPLE
     ./setup.ps1 -Prefix "anb888" -ResourceGroup "anbo-ints-usecase-3"
+
+.EXAMPLE
+    ./setup.ps1 -Prefix "anb888" -ResourceGroup "anbo-ints-usecase-3" -Deploy
+
+.EXAMPLE
+    ./setup.ps1 -Prefix "anb888" -ResourceGroup "anbo-ints-usecase-3" -DeployOnly
 
 .EXAMPLE
     ./setup.ps1 -Prefix "anb888" -ResourceGroup "anbo-ints-usecase-3" -Delete
@@ -39,7 +51,16 @@ param(
     [string]$Location = "swedencentral",
 
     [Parameter(Mandatory = $false)]
-    [switch]$Delete
+    [switch]$Delete,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$Deploy,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$DeployOnly,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$CreateGraphPartnerConfiguration
 )
 
 Set-StrictMode -Version Latest
@@ -60,7 +81,7 @@ function Write-Phase {
 
 # Ensure required modules are installed and up-to-date
 Write-Phase "Prerequisites"
-$requiredModules = @("Az.Accounts", "Az.Resources", "Bicep")
+$requiredModules = @("Az.Accounts", "Az.Resources", "Az.Websites", "Bicep")
 
 foreach ($moduleName in $requiredModules) {
     $installed = Get-Module -Name $moduleName -ListAvailable | 
@@ -87,19 +108,71 @@ foreach ($moduleName in $requiredModules) {
     Write-Host "$moduleName v$($loadedModule.Version) - OK"
 }
 
-# Compile Bicep to ARM JSON using PSBicep module
-Write-Host ""
-Write-Host "Compiling Bicep template..."
-try {
-    Build-Bicep -Path $bicepFile -OutputPath $armTemplateFile -ErrorAction Stop
-    Write-Host "Bicep compiled successfully: $armTemplateFile"
-} catch {
-    if (Test-Path $armTemplateFile) {
-        Write-Host "Bicep compilation failed, using pre-compiled ARM template" -ForegroundColor Yellow
-        Write-Host "Error: $_" -ForegroundColor Yellow
-    } else {
-        Write-Error "Bicep compilation failed and no pre-compiled template exists: $_"
-        exit 1
+# Function to deploy code to Function App
+function Deploy-FunctionCode {
+    param(
+        [string]$FunctionAppName,
+        [string]$ResourceGroupName,
+        [string]$SourcePath
+    )
+    
+    Write-Phase "Deploy Function Code"
+    
+    # Verify function app exists
+    $funcApp = Get-AzWebApp -ResourceGroupName $ResourceGroupName -Name $FunctionAppName -ErrorAction SilentlyContinue
+    if (-not $funcApp) {
+        Write-Error "Function App '$FunctionAppName' not found in resource group '$ResourceGroupName'"
+        return $false
+    }
+    Write-Host "Found Function App: $FunctionAppName"
+    
+    # Create temp zip file
+    $zipPath = Join-Path ([System.IO.Path]::GetTempPath()) "func-deploy-$(Get-Random).zip"
+    
+    try {
+        Write-Host "Creating deployment package..."
+        
+        # Get items to include (exclude infra, .git, etc.)
+        $excludePatterns = @('.git', '.vscode', 'infra', '*.zip', 'main.json', '.gitignore')
+        $includeItems = Get-ChildItem -Path $SourcePath -Exclude $excludePatterns
+        
+        # Create zip
+        Compress-Archive -Path $includeItems.FullName -DestinationPath $zipPath -Force
+        
+        $zipSize = (Get-Item $zipPath).Length / 1KB
+        Write-Host "Package created: $([Math]::Round($zipSize, 1)) KB"
+        
+        # Deploy
+        Write-Host "Deploying to $FunctionAppName..."
+        Publish-AzWebApp -ResourceGroupName $ResourceGroupName -Name $FunctionAppName -ArchivePath $zipPath -Force
+        
+        Write-Host "Deployment complete!" -ForegroundColor Green
+        return $true
+    }
+    finally {
+        # Cleanup temp file
+        if (Test-Path $zipPath) {
+            Remove-Item $zipPath -Force
+        }
+    }
+}
+
+# Skip Bicep compilation for DeployOnly
+if (-not $DeployOnly) {
+    # Compile Bicep to ARM JSON using PSBicep module
+    Write-Host ""
+    Write-Host "Compiling Bicep template..."
+    try {
+        Build-Bicep -Path $bicepFile -OutputPath $armTemplateFile -ErrorAction Stop
+        Write-Host "Bicep compiled successfully: $armTemplateFile"
+    } catch {
+        if (Test-Path $armTemplateFile) {
+            Write-Host "Bicep compilation failed, using pre-compiled ARM template" -ForegroundColor Yellow
+            Write-Host "Error: $_" -ForegroundColor Yellow
+        } else {
+            Write-Error "Bicep compilation failed and no pre-compiled template exists: $_"
+            exit 1
+        }
     }
 }
 
@@ -157,6 +230,13 @@ if (-not $rg) {
     Write-Host "Resource group '$ResourceGroup' exists."
 }
 
+# DeployOnly mode - just deploy code
+if ($DeployOnly) {
+    $functionAppName = "$Prefix-func"
+    Deploy-FunctionCode -FunctionAppName $functionAppName -ResourceGroupName $ResourceGroup -SourcePath $PSScriptRoot
+    exit 0
+}
+
 if ($Delete) {
     # Delete the stack and all resources
     Write-Phase "Delete Stack"
@@ -174,14 +254,19 @@ if ($Delete) {
         Write-Host "Stack '$stackName' does not exist." -ForegroundColor Yellow
     }
 } else {
-    # Download PowerShell modules for Flex Consumption
+    # Download PowerShell modules for Flex Consumption (only if modules folder missing)
     Write-Phase "Local Dependencies"
-    Write-Host "Preparing local PowerShell modules for Flex Consumption..."
-    $fetchModulesScript = Join-Path $PSScriptRoot "fetch-modules.ps1"
-    if (Test-Path $fetchModulesScript) {
-        & $fetchModulesScript
+    $modulesPath = Join-Path $PSScriptRoot "modules"
+    if (-not (Test-Path $modulesPath)) {
+        Write-Host "Preparing local PowerShell modules for Flex Consumption..."
+        $fetchModulesScript = Join-Path $PSScriptRoot "fetch-modules.ps1"
+        if (Test-Path $fetchModulesScript) {
+            & $fetchModulesScript
+        } else {
+            Write-Host "Warning: fetch-modules.ps1 not found, skipping module download." -ForegroundColor Yellow
+        }
     } else {
-        Write-Host "Warning: fetch-modules.ps1 not found, skipping module download." -ForegroundColor Yellow
+        Write-Host "Modules folder exists, skipping download. Delete 'modules/' to force refresh."
     }
     
     # Create or update the stack
@@ -191,12 +276,13 @@ if ($Delete) {
     Write-Host "  Template: $armTemplateFile"
     Write-Host "  Prefix: $Prefix"
     Write-Host "  Location: $Location"
+    Write-Host "  CreateGraphPartnerConfiguration: $CreateGraphPartnerConfiguration"
     
     $result = Set-AzResourceGroupDeploymentStack `
         -Name $stackName `
         -ResourceGroupName $ResourceGroup `
         -TemplateFile $armTemplateFile `
-        -TemplateParameterObject @{ prefix = $Prefix; location = $Location } `
+        -TemplateParameterObject @{ prefix = $Prefix; location = $Location; createGraphPartnerConfiguration = $CreateGraphPartnerConfiguration.IsPresent } `
         -ActionOnUnmanage DeleteAll `
         -DenySettingsMode None `
         -Force
@@ -212,9 +298,29 @@ if ($Delete) {
         $result.Outputs.GetEnumerator() | ForEach-Object {
             Write-Host "  $($_.Key): $($_.Value.Value)"
         }
+        
+        # Display federation parameters for App Registration
+        Write-Host ""
+        Write-Host "===========================================" -ForegroundColor Magenta
+        Write-Host "Federation Command for App Registration" -ForegroundColor Magenta
+        Write-Host "===========================================" -ForegroundColor Magenta
+        Write-Host ""
+        Write-Host "Replace <APP_ID> with your App Registration's Application (client) ID:" -ForegroundColor White
+        Write-Host ""
+        Write-Host $result.Outputs['azFederatedCredentialCommand'].Value -ForegroundColor Yellow
+        Write-Host ""
     }
     
     Write-Host ""
+    Write-Host "To deploy code only, run:" -ForegroundColor Yellow
+    Write-Host "  ./setup.ps1 -Prefix '$Prefix' -ResourceGroup '$ResourceGroup' -DeployOnly" -ForegroundColor Yellow
+    Write-Host ""
     Write-Host "To delete all resources, run:" -ForegroundColor Yellow
     Write-Host "  ./setup.ps1 -Prefix '$Prefix' -ResourceGroup '$ResourceGroup' -Delete" -ForegroundColor Yellow
+    
+    # Deploy code if requested
+    if ($Deploy) {
+        $functionAppName = "$Prefix-func"
+        Deploy-FunctionCode -FunctionAppName $functionAppName -ResourceGroupName $ResourceGroup -SourcePath $PSScriptRoot
+    }
 }

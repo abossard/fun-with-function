@@ -13,6 +13,15 @@ param prefix string
 @description('Azure region for deployment')
 param location string = 'swedencentral'
 
+@description('Client ID of the App Registration federated to UAMI for Graph API access')
+param graphAppClientId string = 'bebcf6cd-b423-454d-a4a6-3cfd9d107886'
+
+@description('Create Event Grid Partner Configuration for Microsoft Graph (set true on first deployment per RG)')
+param createGraphPartnerConfiguration bool = false
+
+@description('Current UTC time - used for partner authorization expiration calculation')
+param nowUtc string = utcNow()
+
 // ============================================================
 // Variables - Resource Names
 // ============================================================
@@ -105,6 +114,11 @@ resource attachmentsQueueResource 'Microsoft.Storage/storageAccounts/queueServic
 resource metadataQueueResource 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
   parent: queueService
   name: metadataQueueName
+}
+
+resource userChangesQueueResource 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
+  parent: queueService
+  name: 'hr-user-changes-q'
 }
 
 // ============================================================
@@ -295,6 +309,12 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'CosmosDBConnection__credential', value: 'managedidentity' }
         { name: 'CosmosDBConnection__clientId', value: managedIdentity.properties.clientId }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
+        { name: 'GRAPH_APP_CLIENT_ID', value: graphAppClientId }
+        { name: 'AZURE_TENANT_ID', value: tenant().tenantId }
+        { name: 'AZURE_SUBSCRIPTION_ID', value: subscription().subscriptionId }
+        { name: 'RESOURCE_GROUP', value: resourceGroup().name }
+        { name: 'LOCATION', value: location }
+        { name: 'PREFIX', value: prefix }
       ]
     }
     functionAppConfig: {
@@ -405,6 +425,37 @@ resource eventGridMetadataSubscription 'Microsoft.EventGrid/systemTopics/eventSu
 }
 
 // ============================================================
+// Event Grid Partner Configuration (for Microsoft Graph)
+// Only created once per resource group, shared by all function apps
+// ============================================================
+
+// Microsoft Graph API partner registration ID (well-known)
+var graphPartnerRegistrationId = 'c02e0126-707c-436d-b6a1-175d2748fb58'
+
+// Reference existing partner configuration if not creating
+resource existingPartnerConfig 'Microsoft.EventGrid/partnerConfigurations@2024-06-01-preview' existing = if (!createGraphPartnerConfiguration) {
+  name: 'default'
+}
+
+// Create partner configuration if flag is true
+resource partnerConfiguration 'Microsoft.EventGrid/partnerConfigurations@2024-06-01-preview' = if (createGraphPartnerConfiguration) {
+  name: 'default'
+  location: 'global'
+  properties: {
+    partnerAuthorization: {
+      defaultMaximumExpirationTimeInDays: 365
+      authorizedPartnersList: [
+        {
+          partnerRegistrationImmutableId: graphPartnerRegistrationId
+          partnerName: 'MicrosoftGraphAPI'
+          authorizationExpirationTimeInUtc: dateTimeAdd(nowUtc, 'P365D')
+        }
+      ]
+    }
+  }
+}
+
+// ============================================================
 // Outputs
 // ============================================================
 output functionAppName string = functionApp.name
@@ -415,3 +466,7 @@ output cosmosEndpoint string = cosmosAccount.properties.documentEndpoint
 output appInsightsConnectionString string = appInsights.properties.ConnectionString
 output managedIdentityClientId string = managedIdentity.properties.clientId
 output managedIdentityPrincipalId string = managedIdentity.properties.principalId
+output managedIdentityResourceId string = managedIdentity.id
+
+// Ready-to-execute az cli command for federated credential (replace <APP_ID>)
+output azFederatedCredentialCommand string = 'az ad app federated-credential create --id <APP_ID> --parameters \'{"name":"${uamiName}-federation","issuer":"https://login.microsoftonline.com/${tenant().tenantId}/v2.0","subject":"${managedIdentity.properties.principalId}","audiences":["api://AzureADTokenExchange"],"description":"Federation with UAMI ${uamiName}"}\''

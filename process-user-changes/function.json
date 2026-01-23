@@ -1,0 +1,20 @@
+{
+  "bindings": [
+    {
+      "name": "QueueItem",
+      "type": "queueTrigger",
+      "direction": "in",
+      "queueName": "hr-user-changes-q",
+      "connection": "AzureWebJobsStorage"
+    },
+    {
+      "name": "outputDocument",
+      "type": "cosmosDB",
+      "direction": "out",
+      "databaseName": "hrdb",
+      "containerName": "emails",
+      "connection": "CosmosDBConnection",
+      "createIfNotExists": false
+    }
+  ]
+}
