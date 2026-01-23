@@ -25,6 +25,7 @@ var logAnalyticsName = '${prefix}-law'
 var appInsightsName = '${prefix}-func-ai'
 var eventGridTopicName = '${prefix}-storage-topic'
 var eventGridSubName = '${prefix}-egsub-attachments'
+var eventGridMetadataSubName = '${prefix}-egsub-metadata'
 
 // ============================================================
 // Variables - Resource Sub-Names
@@ -34,14 +35,15 @@ var cosmosContainerName = 'emails'
 var emailsContainerName = 'emails'
 var deploymentsContainerName = 'deployments'
 var attachmentsQueueName = 'hr-attachments-q'
+var metadataQueueName = 'hr-metadata-q'
 var partitionKeyPath = '/pk'
 
 // ============================================================
 // Variables - Built-in Role Definition IDs
 // ============================================================
-var storageBlobDataContributorRole = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var storageBlobDataOwnerRole = 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
 var storageQueueDataContributorRole = '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
+var storageQueueDataMessageSenderRole = 'c6a89b2d-59bc-44d0-9896-0f6e12d7b80a' // Required for Event Grid to write to queue via UAMI
 var eventGridContributorRole = '1e241071-0855-49ea-94dc-649edcd759de'
 
 // ============================================================
@@ -94,10 +96,15 @@ resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-05-0
   name: 'default'
 }
 
-// Storage Queue
+// Storage Queues
 resource attachmentsQueueResource 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
   parent: queueService
   name: attachmentsQueueName
+}
+
+resource metadataQueueResource 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
+  parent: queueService
+  name: metadataQueueName
 }
 
 // ============================================================
@@ -110,16 +117,6 @@ resource storageBlobDataOwnerAssignment 'Microsoft.Authorization/roleAssignments
     principalId: managedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataOwnerRole)
-  }
-}
-
-resource storageBlobDataContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(storageAccount.id, managedIdentity.id, storageBlobDataContributorRole)
-  scope: storageAccount
-  properties: {
-    principalId: managedIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRole)
   }
 }
 
@@ -140,6 +137,17 @@ resource eventGridContributorAssignment 'Microsoft.Authorization/roleAssignments
     principalId: managedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', eventGridContributorRole)
+  }
+}
+
+// UAMI needs Storage Queue Data Message Sender for Event Grid to deliver via managed identity
+resource storageQueueDataMessageSenderAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storageAccount.id, managedIdentity.id, storageQueueDataMessageSenderRole)
+  scope: storageAccount
+  properties: {
+    principalId: managedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageQueueDataMessageSenderRole)
   }
 }
 
@@ -279,6 +287,15 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
       }
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
+      appSettings: [
+        { name: 'AzureWebJobsStorage__accountName', value: storageAccount.name }
+        { name: 'AzureWebJobsStorage__credential', value: 'managedidentity' }
+        { name: 'AzureWebJobsStorage__clientId', value: managedIdentity.properties.clientId }
+        { name: 'CosmosDBConnection__accountEndpoint', value: cosmosAccount.properties.documentEndpoint }
+        { name: 'CosmosDBConnection__credential', value: 'managedidentity' }
+        { name: 'CosmosDBConnection__clientId', value: managedIdentity.properties.clientId }
+        { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
+      ]
     }
     functionAppConfig: {
       deployment: {
@@ -301,50 +318,43 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
       }
     }
   }
-  dependsOn: [
-    deploymentsContainer
-    storageBlobDataOwnerAssignment
-  ]
-}
-
-// Function App Settings (as nested resource)
-resource functionAppSettings 'Microsoft.Web/sites/config@2024-04-01' = {
-  parent: functionApp
-  name: 'appsettings'
-  properties: {
-    AzureWebJobsStorage__accountName: storageAccount.name
-    AzureWebJobsStorage__credential: 'managedidentity'
-    AzureWebJobsStorage__clientId: managedIdentity.properties.clientId
-    CosmosDBConnection__accountEndpoint: cosmosAccount.properties.documentEndpoint
-    CosmosDBConnection__credential: 'managedidentity'
-    CosmosDBConnection__clientId: managedIdentity.properties.clientId
-    APPLICATIONINSIGHTS_CONNECTION_STRING: appInsights.properties.ConnectionString
-  }
 }
 
 // ============================================================
-// Event Grid System Topic for Storage
+// Event Grid System Topic for Storage (with UAMI for delivery)
 // ============================================================
 resource eventGridSystemTopic 'Microsoft.EventGrid/systemTopics@2025-02-15' = {
   name: eventGridTopicName
   location: location
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${managedIdentity.id}': {}
+    }
+  }
   properties: {
     source: storageAccount.id
     topicType: 'Microsoft.Storage.StorageAccounts'
   }
 }
 
-// Event Grid Subscription (Blob Created → Storage Queue)
+// Event Grid Subscription: Attachments (Blob Created → Storage Queue via UAMI)
 resource eventGridSubscription 'Microsoft.EventGrid/systemTopics/eventSubscriptions@2025-02-15' = {
   parent: eventGridSystemTopic
   name: eventGridSubName
   properties: {
-    destination: {
-      endpointType: 'StorageQueue'
-      properties: {
-        resourceId: storageAccount.id
-        queueName: attachmentsQueueName
-        queueMessageTimeToLiveInSeconds: 604800 // 7 days
+    deliveryWithResourceIdentity: {
+      identity: {
+        type: 'UserAssigned'
+        userAssignedIdentity: managedIdentity.id
+      }
+      destination: {
+        endpointType: 'StorageQueue'
+        properties: {
+          resourceId: storageAccount.id
+          queueName: attachmentsQueueName
+          queueMessageTimeToLiveInSeconds: 604800 // 7 days
+        }
       }
     }
     filter: {
@@ -362,9 +372,36 @@ resource eventGridSubscription 'Microsoft.EventGrid/systemTopics/eventSubscripti
     }
     eventDeliverySchema: 'CloudEventSchemaV1_0'
   }
-  dependsOn: [
-    attachmentsQueueResource
-  ]
+}
+
+// Event Grid Subscription: Metadata (Blob Created → Storage Queue via UAMI)
+resource eventGridMetadataSubscription 'Microsoft.EventGrid/systemTopics/eventSubscriptions@2025-02-15' = {
+  parent: eventGridSystemTopic
+  name: eventGridMetadataSubName
+  properties: {
+    deliveryWithResourceIdentity: {
+      identity: {
+        type: 'UserAssigned'
+        userAssignedIdentity: managedIdentity.id
+      }
+      destination: {
+        endpointType: 'StorageQueue'
+        properties: {
+          resourceId: storageAccount.id
+          queueName: metadataQueueName
+          queueMessageTimeToLiveInSeconds: 604800 // 7 days
+        }
+      }
+    }
+    filter: {
+      includedEventTypes: [
+        'Microsoft.Storage.BlobCreated'
+      ]
+      subjectBeginsWith: '/blobServices/default/containers/${emailsContainerName}/blobs/metadata/'
+      subjectEndsWith: '/metadata.json'
+    }
+    eventDeliverySchema: 'CloudEventSchemaV1_0'
+  }
 }
 
 // ============================================================

@@ -1,11 +1,10 @@
 {
   "bindings": [
     {
-      "name": "metadata",
-      "type": "blobTrigger",
+      "name": "queueItem",
+      "type": "queueTrigger",
       "direction": "in",
-      "path": "emails/metadata/{correlationId}/metadata.json",
-      "source": "EventGrid",
+      "queueName": "hr-metadata-q",
       "connection": "AzureWebJobsStorage"
     },
     {
