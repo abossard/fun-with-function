@@ -29,10 +29,12 @@ if ($eventType -eq "Microsoft.Graph.SubscriptionReauthorizationRequired") {
         $graphAppClientId = $env:GRAPH_APP_CLIENT_ID
         $tenantIdEnv = $env:AZURE_TENANT_ID
         $uamiClientId = $env:AzureWebJobsStorage__clientId
+        $identityEndpoint = $env:IDENTITY_ENDPOINT
+        $identityHeader = $env:IDENTITY_HEADER
         
-        # Get Graph token
-        $assertionResponse = Invoke-RestMethod -Uri "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=api://AzureADTokenExchange&client_id=$uamiClientId" `
-            -Headers @{ "Metadata" = "true" }
+        # Get Graph token using App Service MSI endpoint
+        $assertionUri = "$identityEndpoint`?api-version=2019-08-01&resource=api://AzureADTokenExchange&client_id=$uamiClientId"
+        $assertionResponse = Invoke-RestMethod -Uri $assertionUri -Headers @{ "X-IDENTITY-HEADER" = $identityHeader }
         $tokenBody = @{
             client_id = $graphAppClientId
             scope = "https://graph.microsoft.com/.default"
@@ -109,13 +111,15 @@ if ($changeType -in @("created", "updated") -and $resourceId) {
         $graphAppClientId = $env:GRAPH_APP_CLIENT_ID
         $tenantIdEnv = $env:AZURE_TENANT_ID
         $uamiClientId = $env:AzureWebJobsStorage__clientId
+        $identityEndpoint = $env:IDENTITY_ENDPOINT
+        $identityHeader = $env:IDENTITY_HEADER
         
-        if ($graphAppClientId -and $tenantIdEnv) {
+        if ($graphAppClientId -and $tenantIdEnv -and $identityEndpoint) {
             Write-Host "Fetching user details from Graph API..."
             
-            # Get assertion token from UAMI
-            $assertionResponse = Invoke-RestMethod -Uri "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=api://AzureADTokenExchange&client_id=$uamiClientId" `
-                -Headers @{ "Metadata" = "true" }
+            # Get assertion token using App Service MSI endpoint
+            $assertionUri = "$identityEndpoint`?api-version=2019-08-01&resource=api://AzureADTokenExchange&client_id=$uamiClientId"
+            $assertionResponse = Invoke-RestMethod -Uri $assertionUri -Headers @{ "X-IDENTITY-HEADER" = $identityHeader }
             $assertion = $assertionResponse.access_token
             
             # Exchange for Graph token
