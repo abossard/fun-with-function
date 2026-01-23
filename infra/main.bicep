@@ -54,6 +54,7 @@ var storageBlobDataOwnerRole = 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
 var storageQueueDataContributorRole = '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
 var storageQueueDataMessageSenderRole = 'c6a89b2d-59bc-44d0-9896-0f6e12d7b80a' // Required for Event Grid to write to queue via UAMI
 var eventGridContributorRole = '1e241071-0855-49ea-94dc-649edcd759de'
+var eventGridEventSubscriptionContributorRole = '428e0ff0-5e57-4d9c-a221-2c70d0e0a443' // Required for UAMI to create Event Subscriptions
 
 // ============================================================
 // User-Assigned Managed Identity
@@ -162,6 +163,17 @@ resource storageQueueDataMessageSenderAssignment 'Microsoft.Authorization/roleAs
     principalId: managedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageQueueDataMessageSenderRole)
+  }
+}
+
+// UAMI needs EventGrid EventSubscription Contributor to create Event Subscriptions on Partner Topics
+resource eventGridEventSubContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, managedIdentity.id, eventGridEventSubscriptionContributorRole)
+  scope: resourceGroup()
+  properties: {
+    principalId: managedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', eventGridEventSubscriptionContributorRole)
   }
 }
 
