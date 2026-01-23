@@ -3,5 +3,7 @@
     "azureFunctions.projectLanguage": "PowerShell",
     "azureFunctions.projectRuntime": "~4",
     "debug.internalConsoleOptions": "neverOpen",
-    "azureFunctions.showFlexEventGridWarning": false
+    "azureFunctions.showFlexEventGridWarning": false,
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+    "python-envs.pythonProjects": []
 }
