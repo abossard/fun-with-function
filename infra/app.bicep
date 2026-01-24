@@ -25,6 +25,9 @@ param graphPartnerTopicName string = 'graph-users-topic'
 @description('Optional override for the Partner Topic event subscription name')
 param graphPartnerEventSubscriptionName string = ''
 
+@description('Optional objectId for current user to grant Event Grid permissions')
+param currentUserObjectId string = ''
+
 // ============================================================
 // Variables - Resource Names
 // ============================================================
@@ -161,6 +164,17 @@ resource eventGridContributorAssignment 'Microsoft.Authorization/roleAssignments
   }
 }
 
+// UAMI needs Event Grid Contributor at RG scope to activate Partner Topics
+resource eventGridContributorRgAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, managedIdentity.id, eventGridContributorRole)
+  scope: resourceGroup()
+  properties: {
+    principalId: managedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', eventGridContributorRole)
+  }
+}
+
 // UAMI needs Storage Queue Data Message Sender for Event Grid to deliver via managed identity
 resource storageQueueDataMessageSenderAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(storageAccount.id, managedIdentity.id, storageQueueDataMessageSenderRole)
@@ -172,6 +186,37 @@ resource storageQueueDataMessageSenderAssignment 'Microsoft.Authorization/roleAs
   }
 }
 
+// Optional: grant Storage permissions to current user
+resource currentUserStorageBlobDataOwnerAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (currentUserObjectId != '') {
+  name: guid(storageAccount.id, currentUserObjectId, storageBlobDataOwnerRole)
+  scope: storageAccount
+  properties: {
+    principalId: currentUserObjectId
+    principalType: 'User'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataOwnerRole)
+  }
+}
+
+resource currentUserStorageQueueDataContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (currentUserObjectId != '') {
+  name: guid(storageAccount.id, currentUserObjectId, storageQueueDataContributorRole)
+  scope: storageAccount
+  properties: {
+    principalId: currentUserObjectId
+    principalType: 'User'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageQueueDataContributorRole)
+  }
+}
+
+resource currentUserStorageQueueDataMessageSenderAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (currentUserObjectId != '') {
+  name: guid(storageAccount.id, currentUserObjectId, storageQueueDataMessageSenderRole)
+  scope: storageAccount
+  properties: {
+    principalId: currentUserObjectId
+    principalType: 'User'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageQueueDataMessageSenderRole)
+  }
+}
+
 // UAMI needs EventGrid EventSubscription Contributor to create Event Subscriptions on Partner Topics
 resource eventGridEventSubContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(resourceGroup().id, managedIdentity.id, eventGridEventSubscriptionContributorRole)
@@ -179,6 +224,27 @@ resource eventGridEventSubContributorAssignment 'Microsoft.Authorization/roleAss
   properties: {
     principalId: managedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', eventGridEventSubscriptionContributorRole)
+  }
+}
+
+// Optional: grant Event Grid permissions to current user for activation/management
+resource currentUserEventGridContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (currentUserObjectId != '') {
+  name: guid(resourceGroup().id, currentUserObjectId, eventGridContributorRole)
+  scope: resourceGroup()
+  properties: {
+    principalId: currentUserObjectId
+    principalType: 'User'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', eventGridContributorRole)
+  }
+}
+
+resource currentUserEventGridEventSubContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (currentUserObjectId != '') {
+  name: guid(resourceGroup().id, currentUserObjectId, eventGridEventSubscriptionContributorRole)
+  scope: resourceGroup()
+  properties: {
+    principalId: currentUserObjectId
+    principalType: 'User'
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', eventGridEventSubscriptionContributorRole)
   }
 }
@@ -244,6 +310,17 @@ resource cosmosRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssi
   name: guid(cosmosAccount.id, managedIdentity.id, 'data-contributor')
   properties: {
     principalId: managedIdentity.properties.principalId
+    roleDefinitionId: '${cosmosAccount.id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002'
+    scope: cosmosAccount.id
+  }
+}
+
+// Optional: grant Cosmos DB data access to current user
+resource currentUserCosmosRoleAssignment 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = if (currentUserObjectId != '') {
+  parent: cosmosAccount
+  name: guid(cosmosAccount.id, currentUserObjectId, 'data-contributor')
+  properties: {
+    principalId: currentUserObjectId
     roleDefinitionId: '${cosmosAccount.id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002'
     scope: cosmosAccount.id
   }

@@ -76,6 +76,9 @@ param(
 
     [Parameter(Mandatory = $false)]
     [string]$GraphPartnerEventSubscriptionName = ""
+,
+    [Parameter(Mandatory = $false)]
+    [string]$CurrentUserObjectId = ""
 )
 
 Set-StrictMode -Version Latest
@@ -252,6 +255,18 @@ if (Test-AzureConnection -TenantId $tenantId) {
     Write-Host "Subscription: $($context.Subscription.Name)"
 }
 
+# Resolve current user objectId if not provided
+$currentUserObjectId = $CurrentUserObjectId
+if (-not $currentUserObjectId) {
+    try {
+        $currentUser = Get-AzADUser -UserPrincipalName $context.Account.Id -ErrorAction Stop
+        $currentUserObjectId = $currentUser.Id
+        Write-Host "Resolved current user objectId: $currentUserObjectId"
+    } catch {
+        Write-Host "Warning: Could not resolve current user objectId. Pass -CurrentUserObjectId to assign roles." -ForegroundColor Yellow
+    }
+}
+
 # Ensure resource group exists
 Write-Phase "Resource Group"
 $rg = Get-AzResourceGroup -Name $ResourceGroup -ErrorAction SilentlyContinue
@@ -334,6 +349,7 @@ if ($Delete) {
             createGraphPartnerTopicEventSubscription = $CreateGraphPartnerTopicEventSubscription.IsPresent
             graphPartnerTopicName = $GraphPartnerTopicName
             graphPartnerEventSubscriptionName = $GraphPartnerEventSubscriptionName
+            currentUserObjectId = $currentUserObjectId
         } `
         -ActionOnUnmanage DeleteAll `
         -DenySettingsMode None `
