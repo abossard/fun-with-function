@@ -259,8 +259,7 @@ if (Test-AzureConnection -TenantId $tenantId) {
 $currentUserObjectId = $CurrentUserObjectId
 if (-not $currentUserObjectId) {
     try {
-        $currentUser = Get-AzADUser -UserPrincipalName $context.Account.Id -ErrorAction Stop
-        $currentUserObjectId = $currentUser.Id
+        $currentUserObjectId = (Get-AzADUser -SignedIn -ErrorAction Stop).Id
         Write-Host "Resolved current user objectId: $currentUserObjectId"
     } catch {
         Write-Host "Warning: Could not resolve current user objectId. Pass -CurrentUserObjectId to assign roles." -ForegroundColor Yellow
