@@ -13,12 +13,14 @@ Example on how to use the Azure Integration Services
 - Attachment queue processor (PowerShell) logs/handles attachment events and writes a Cosmos DB record.
 - Single User-Assigned Managed Identity (UAMI) applied to Function App, used for Event Grid delivery, and enabled on Logic App; data-plane access uses MI (roles: Storage Blob Data Contributor + Queue Data Contributor, Cosmos DB Data Contributor as needed).
 - Application Insights enabled for the Function App.
+- Microsoft Graph change notifications flow through an Event Grid Partner Topic to a Storage Queue that triggers `process-user-changes`.
 
 ### Message flow
 ```
 Email --> Logic App --> Blob Storage (metadata.json + attachments)
 		metadata.json --> Blob Trigger Function -> Cosmos DB
 		attachments/* --> Event Grid (MI delivery) -> Storage Queue -> Attachment handler
+		Microsoft Graph --> Event Grid Partner Topic -> Storage Queue -> User changes handler
 ```
 
 ### Visual overview (Mermaid)
@@ -62,7 +64,8 @@ Create a file at ./local.settings.json:
 	"Values": {
 		"AzureWebJobsStorage": "UseDevelopmentStorage=true",
 		"FUNCTIONS_WORKER_RUNTIME": "powershell",
-		"DISABLE_COSMOS_OUTPUT": "true"
+		"DISABLE_COSMOS_OUTPUT": "true",
+		"GRAPH_USER_CHANGES_QUEUE_NAME": "hr-user-changes-q"
 	}
 }
 ```
@@ -95,6 +98,23 @@ Use the provisioning script (managed identity, Flex Consumption, Storage + Cosmo
 ```
 ./provision.ps1 <name-prefix> <resource-group>
 ```
+
+### Resource-group shared setup (once per RG)
+Deploy the shared resources (partner configuration) once per resource group:
+
+```
+./setup.ps1 -Prefix <name-prefix> -ResourceGroup <resource-group> -DeploySharedResources
+```
+
+### Function app setup (per app)
+Deploy the app-specific resources per function app:
+
+```
+./setup.ps1 -Prefix <name-prefix> -ResourceGroup <resource-group>
+```
+
+## Microsoft Graph change notifications
+See [docs/graph-change-notifications.md](docs/graph-change-notifications.md) for the deep-dive on Graph subscriptions, Event Grid partner topics, and deployment options.
 
 ## Testing (end-to-end)
 1. Send a test email; Logic App writes metadata.json + attachments.

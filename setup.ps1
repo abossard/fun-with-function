@@ -25,6 +25,9 @@
 .PARAMETER DeployOnly
     If specified, only deploys function code (skips infrastructure).
 
+.PARAMETER DeploySharedResources
+    If specified, deploys resource-group shared resources (partner configuration).
+
 .EXAMPLE
     ./setup.ps1 -Prefix "anb888" -ResourceGroup "anbo-ints-usecase-3"
 
@@ -33,6 +36,9 @@
 
 .EXAMPLE
     ./setup.ps1 -Prefix "anb888" -ResourceGroup "anbo-ints-usecase-3" -DeployOnly
+
+.EXAMPLE
+    ./setup.ps1 -Prefix "anb888" -ResourceGroup "anbo-ints-usecase-3" -DeploySharedResources
 
 .EXAMPLE
     ./setup.ps1 -Prefix "anb888" -ResourceGroup "anbo-ints-usecase-3" -Delete
@@ -60,7 +66,16 @@ param(
     [switch]$DeployOnly,
 
     [Parameter(Mandatory = $false)]
-    [switch]$CreateGraphPartnerConfiguration
+    [switch]$DeploySharedResources,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$CreateGraphPartnerTopicEventSubscription,
+
+    [Parameter(Mandatory = $false)]
+    [string]$GraphPartnerTopicName = "graph-users-topic",
+
+    [Parameter(Mandatory = $false)]
+    [string]$GraphPartnerEventSubscriptionName = ""
 )
 
 Set-StrictMode -Version Latest
@@ -68,8 +83,10 @@ $ErrorActionPreference = "Stop"
 
 # Stack and template configuration
 $stackName = "$Prefix-stack"
-$bicepFile = Join-Path $PSScriptRoot "infra/main.bicep"
-$armTemplateFile = Join-Path $PSScriptRoot "infra/main.json"
+$appBicepFile = Join-Path $PSScriptRoot "infra/app.bicep"
+$appArmTemplateFile = Join-Path $PSScriptRoot "infra/app.json"
+$sharedBicepFile = Join-Path $PSScriptRoot "infra/rg-shared.bicep"
+$sharedArmTemplateFile = Join-Path $PSScriptRoot "infra/rg-shared.json"
 
 function Write-Phase {
     param([string]$Title)
@@ -163,15 +180,30 @@ if (-not $DeployOnly) {
     Write-Host ""
     Write-Host "Compiling Bicep template..."
     try {
-        Build-Bicep -Path $bicepFile -OutputPath $armTemplateFile -ErrorAction Stop
-        Write-Host "Bicep compiled successfully: $armTemplateFile"
+        Build-Bicep -Path $appBicepFile -OutputPath $appArmTemplateFile -ErrorAction Stop
+        Write-Host "Bicep compiled successfully: $appArmTemplateFile"
     } catch {
-        if (Test-Path $armTemplateFile) {
+        if (Test-Path $appArmTemplateFile) {
             Write-Host "Bicep compilation failed, using pre-compiled ARM template" -ForegroundColor Yellow
             Write-Host "Error: $_" -ForegroundColor Yellow
         } else {
             Write-Error "Bicep compilation failed and no pre-compiled template exists: $_"
             exit 1
+        }
+    }
+
+    if ($DeploySharedResources) {
+        try {
+            Build-Bicep -Path $sharedBicepFile -OutputPath $sharedArmTemplateFile -ErrorAction Stop
+            Write-Host "Bicep compiled successfully: $sharedArmTemplateFile"
+        } catch {
+            if (Test-Path $sharedArmTemplateFile) {
+                Write-Host "Shared bicep compilation failed, using pre-compiled ARM template" -ForegroundColor Yellow
+                Write-Host "Error: $_" -ForegroundColor Yellow
+            } else {
+                Write-Error "Shared bicep compilation failed and no pre-compiled template exists: $_"
+                exit 1
+            }
         }
     }
 }
@@ -273,16 +305,36 @@ if ($Delete) {
     Write-Phase "Deploy Stack"
     
     Write-Host "Deploying stack '$stackName'..."
-    Write-Host "  Template: $armTemplateFile"
+    Write-Host "  Template: $appArmTemplateFile"
     Write-Host "  Prefix: $Prefix"
     Write-Host "  Location: $Location"
-    Write-Host "  CreateGraphPartnerConfiguration: $CreateGraphPartnerConfiguration"
+    Write-Host "  DeploySharedResources: $DeploySharedResources"
+    Write-Host "  CreateGraphPartnerTopicEventSubscription: $CreateGraphPartnerTopicEventSubscription"
     
+    if ($DeploySharedResources) {
+        $sharedStackName = "$ResourceGroup-shared-stack"
+        Write-Host "Deploying shared stack '$sharedStackName'..."
+        $sharedResult = Set-AzResourceGroupDeploymentStack `
+            -Name $sharedStackName `
+            -ResourceGroupName $ResourceGroup `
+            -TemplateFile $sharedArmTemplateFile `
+            -ActionOnUnmanage DeleteAll `
+            -DenySettingsMode None `
+            -Force
+        Write-Host "Shared stack status: $($sharedResult.ProvisioningState)" -ForegroundColor Green
+    }
+
     $result = Set-AzResourceGroupDeploymentStack `
         -Name $stackName `
         -ResourceGroupName $ResourceGroup `
-        -TemplateFile $armTemplateFile `
-        -TemplateParameterObject @{ prefix = $Prefix; location = $Location; createGraphPartnerConfiguration = $CreateGraphPartnerConfiguration.IsPresent } `
+        -TemplateFile $appArmTemplateFile `
+        -TemplateParameterObject @{ 
+            prefix = $Prefix
+            location = $Location
+            createGraphPartnerTopicEventSubscription = $CreateGraphPartnerTopicEventSubscription.IsPresent
+            graphPartnerTopicName = $GraphPartnerTopicName
+            graphPartnerEventSubscriptionName = $GraphPartnerEventSubscriptionName
+        } `
         -ActionOnUnmanage DeleteAll `
         -DenySettingsMode None `
         -Force
