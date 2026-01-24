@@ -4,15 +4,15 @@
       "name": "queueItem",
       "type": "queueTrigger",
       "direction": "in",
-      "queueName": "hr-metadata-q",
+      "queueName": "graph-metadata-q",
       "connection": "AzureWebJobsStorage"
     },
     {
       "name": "cosmosDoc",
       "type": "cosmosDB",
       "direction": "out",
-      "databaseName": "hrdb",
-      "containerName": "emails",
+      "databaseName": "graphdb",
+      "containerName": "graphSnapshots",
       "createIfNotExists": true,
       "connection": "CosmosDBConnection"
     }
