@@ -41,7 +41,7 @@ if ($blobUrl -match "/graphSnapshots/attachments/([^/]+)/") {
 	# Fallback if path omits leading 'graphSnapshots/'
 	$snapshotId = $matches[1]
 } elseif ($blobUrl -match "/graphSnapshots/([^/]+)/attachments/") {
-	# Legacy pattern graphSnapshots/{sid}/attachments/
+	# Alternative pattern graphSnapshots/{sid}/attachments/
 	$snapshotId = $matches[1]
 }
 
