@@ -161,6 +161,7 @@ function Ensure-GraphChangeSubscription {
 
     $partnerTopicUrl = "https://management.azure.com/subscriptions/$AzureSubscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.EventGrid/partnerTopics/$PartnerTopicName"
     $storageAccountId = "/subscriptions/$AzureSubscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.Storage/storageAccounts/$StorageAccountName"
+    $expectedNotificationUrl = "EventGrid:?azuresubscriptionid=$AzureSubscriptionId&resourcegroup=$ResourceGroup&partnertopic=$PartnerTopicName&location=$Location"
 
     $armToken = $null
     $armHeaders = $null
@@ -188,6 +189,26 @@ function Ensure-GraphChangeSubscription {
             $expirationTime = [DateTime]::Parse($ourSubscription.expirationDateTime)
             $hoursRemaining = ($expirationTime - (Get-Date).ToUniversalTime()).TotalHours
             Write-Host "Existing users subscription found (ID: $($ourSubscription.id)), expires in $([Math]::Round($hoursRemaining, 1)) hours"
+            Write-Host "Subscription details:"
+            Write-Host "  Resource: $($ourSubscription.resource)"
+            Write-Host "  ChangeType: $($ourSubscription.changeType)"
+            Write-Host "  NotificationUrl: $($ourSubscription.notificationUrl)"
+            Write-Host "  LifecycleNotificationUrl: $($ourSubscription.lifecycleNotificationUrl)"
+            Write-Host "  Expiration: $($ourSubscription.expirationDateTime)"
+            Write-Host "  ClientState set: $([string]::IsNullOrEmpty($ourSubscription.clientState) -eq $false)"
+
+            if ($ourSubscription.notificationUrl -ne $expectedNotificationUrl) {
+                Write-Warning "Subscription notificationUrl does not match expected target. Recreating subscription."
+                Write-Host "  Expected: $expectedNotificationUrl"
+                try {
+                    Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/subscriptions/$($ourSubscription.id)" `
+                        -Method DELETE -Headers $headers | Out-Null
+                    Write-Host "Deleted mismatched subscription: $($ourSubscription.id)"
+                    $ourSubscription = $null
+                } catch {
+                    Write-Warning "Failed to delete mismatched subscription: $_"
+                }
+            }
 
             if ($hoursRemaining -lt 12) {
                 Write-Host "Renewing subscription..."
@@ -202,15 +223,10 @@ function Ensure-GraphChangeSubscription {
         Write-Warning "Error checking subscriptions: $_"
     }
 
-    if ($armHeaders) {
-        Ensure-PartnerTopicEventSubscription -PartnerTopicUrl $partnerTopicUrl -ArmHeaders $armHeaders -StorageAccountId $storageAccountId
-        Ensure-PartnerTopicActivated -PartnerTopicUrl $partnerTopicUrl -ArmHeaders $armHeaders
-    }
-
     if (-not $ourSubscription) {
         Write-Host "No Graph subscription found, creating..."
 
-        $notificationUrl = "EventGrid:?azuresubscriptionid=$AzureSubscriptionId&resourcegroup=$ResourceGroup&partnertopic=$PartnerTopicName&location=$Location"
+        $notificationUrl = $expectedNotificationUrl
         $expirationDateTime = (Get-Date).ToUniversalTime().AddDays(2).ToString("yyyy-MM-ddTHH:mm:ssZ")
 
         $subscriptionBody = @{
@@ -235,5 +251,8 @@ function Ensure-GraphChangeSubscription {
         } catch {
             Write-Warning "Graph subscription creation: $_"
         }
+    } elseif ($armHeaders) {
+        Ensure-PartnerTopicEventSubscription -PartnerTopicUrl $partnerTopicUrl -ArmHeaders $armHeaders -StorageAccountId $storageAccountId
+        Ensure-PartnerTopicActivated -PartnerTopicUrl $partnerTopicUrl -ArmHeaders $armHeaders
     }
 }
