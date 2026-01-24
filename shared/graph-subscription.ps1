@@ -146,6 +146,20 @@ function Ensure-GraphChangeSubscription {
         }
     }
 
+    function Test-PartnerTopicExists {
+        param(
+            [string]$PartnerTopicUrl,
+            [hashtable]$ArmHeaders
+        )
+
+        try {
+            Invoke-RestMethod -Uri "$PartnerTopicUrl`?api-version=2024-06-01-preview" -Headers $ArmHeaders -Method GET | Out-Null
+            return $true
+        } catch {
+            return $false
+        }
+    }
+
     try {
         $graphToken = Get-GraphToken
         Write-Host "Got Graph API token"
@@ -210,6 +224,18 @@ function Ensure-GraphChangeSubscription {
                 }
             }
 
+            if ($ourSubscription -and $armHeaders -and -not (Test-PartnerTopicExists -PartnerTopicUrl $partnerTopicUrl -ArmHeaders $armHeaders)) {
+                Write-Warning "Partner topic not found for existing subscription. Recreating subscription."
+                try {
+                    Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/subscriptions/$($ourSubscription.id)" `
+                        -Method DELETE -Headers $headers | Out-Null
+                    Write-Host "Deleted subscription to force partner topic creation: $($ourSubscription.id)"
+                    $ourSubscription = $null
+                } catch {
+                    Write-Warning "Failed to delete subscription: $_"
+                }
+            }
+
             if ($hoursRemaining -lt 12) {
                 Write-Host "Renewing subscription..."
                 $newExpiration = (Get-Date).ToUniversalTime().AddDays(2).ToString("yyyy-MM-ddTHH:mm:ssZ")
@@ -243,10 +269,19 @@ function Ensure-GraphChangeSubscription {
                 -Method POST -Headers $headers -Body $subscriptionBody
             Write-Host "Graph subscription created: $($newSubscription.id)"
 
-            Start-Sleep -Seconds 10
             if ($armHeaders) {
-                Ensure-PartnerTopicActivated -PartnerTopicUrl $partnerTopicUrl -ArmHeaders $armHeaders
-                Ensure-PartnerTopicEventSubscription -PartnerTopicUrl $partnerTopicUrl -ArmHeaders $armHeaders -StorageAccountId $storageAccountId
+                $maxPartnerRetries = 5
+                $partnerDelay = 5
+                for ($attempt = 1; $attempt -le $maxPartnerRetries; $attempt++) {
+                    if (Test-PartnerTopicExists -PartnerTopicUrl $partnerTopicUrl -ArmHeaders $armHeaders) {
+                        Ensure-PartnerTopicActivated -PartnerTopicUrl $partnerTopicUrl -ArmHeaders $armHeaders
+                        Ensure-PartnerTopicEventSubscription -PartnerTopicUrl $partnerTopicUrl -ArmHeaders $armHeaders -StorageAccountId $storageAccountId
+                        break
+                    }
+                    Write-Host "Partner topic not visible yet. Retry $attempt/$maxPartnerRetries in ${partnerDelay}s..."
+                    Start-Sleep -Seconds $partnerDelay
+                    $partnerDelay *= 2
+                }
             }
         } catch {
             Write-Warning "Graph subscription creation: $_"
