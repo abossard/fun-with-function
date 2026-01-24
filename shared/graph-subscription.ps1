@@ -116,7 +116,8 @@ function Ensure-GraphChangeSubscription {
             return
         }
 
-        $eventSubUrl = "$PartnerTopicUrl/eventSubscriptions/$PartnerEventSubscriptionName`?api-version=2024-06-01-preview"
+        # Use stable API for event subscriptions (partner topic already exists by now)
+        $eventSubUrl = "$PartnerTopicUrl/eventSubscriptions/$PartnerEventSubscriptionName`?api-version=2021-12-01"
 
         $eventSubBody = @{
             properties = @{
@@ -138,21 +139,32 @@ function Ensure-GraphChangeSubscription {
             }
         } | ConvertTo-Json -Depth 5
 
-        try {
-            $resp = Invoke-RestMethod -Uri $eventSubUrl -Method PUT -Headers $ArmHeaders -Body $eventSubBody -ErrorAction Stop
-            Write-Host "Event Subscription ensured on Partner Topic (name: $PartnerEventSubscriptionName)"
-            if ($resp) {
-                Write-Host "Event Subscription provisioningState: $($resp.properties.provisioningState)"
+        $maxAttempts = 4
+        $delaySeconds = 5
+        for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            try {
+                $resp = Invoke-RestMethod -Uri $eventSubUrl -Method PUT -Headers $ArmHeaders -Body $eventSubBody -ErrorAction Stop
+                Write-Host "Event Subscription ensured on Partner Topic (name: $PartnerEventSubscriptionName)"
+                if ($resp) {
+                    Write-Host "Event Subscription provisioningState: $($resp.properties.provisioningState)"
+                }
+                return
+            } catch {
+                $details = $_.Exception.Response | ForEach-Object {
+                    try {
+                        $reader = New-Object IO.StreamReader($_.GetResponseStream())
+                        $reader.ReadToEnd()
+                    } catch { $null }
+                }
+                Write-Warning "Event Subscription creation failed (attempt $attempt/$maxAttempts): $($_.Exception.Message)"
+                if ($details) { Write-Warning "Response: $details" }
+                if ($attempt -lt $maxAttempts) {
+                    Start-Sleep -Seconds $delaySeconds
+                    $delaySeconds *= 2
+                } else {
+                    throw
+                }
             }
-        } catch {
-            $details = $_.Exception.Response | ForEach-Object {
-                try {
-                    $reader = New-Object IO.StreamReader($_.GetResponseStream())
-                    $reader.ReadToEnd()
-                } catch { $null }
-            }
-            Write-Warning "Event Subscription creation failed: $($_.Exception.Message)"
-            if ($details) { Write-Warning "Response: $details" }
         }
     }
 
@@ -297,7 +309,7 @@ function Ensure-GraphChangeSubscription {
             Write-Warning "Graph subscription creation: $_"
         }
     } elseif ($armHeaders) {
-        Ensure-PartnerTopicEventSubscription -PartnerTopicUrl $partnerTopicUrl -ArmHeaders $armHeaders -StorageAccountId $storageAccountId
         Ensure-PartnerTopicActivated -PartnerTopicUrl $partnerTopicUrl -ArmHeaders $armHeaders
+        Ensure-PartnerTopicEventSubscription -PartnerTopicUrl $partnerTopicUrl -ArmHeaders $armHeaders -StorageAccountId $storageAccountId
     }
 }
