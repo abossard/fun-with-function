@@ -36,4 +36,6 @@ sequenceDiagram
 ## Notes
 - The partner topic is created by Microsoft Graph when the subscription uses the EventGrid notification URL.
 - Partner topic creation is eventually consistent; retries may be needed before activation/subscription succeed.
-- The Function App uses a managed identity to call Graph and ARM.
+- The Function App uses a managed identity to call Microsoft Graph and Azure Resource Manager.
+- Change notifications can include user creation/updates/deletion, group modifications, and permission changes.
+- This showcase demonstrates end-to-end integration of Microsoft Graph with Azure Integration Services (Event Grid, Storage Queues, Azure Functions).
