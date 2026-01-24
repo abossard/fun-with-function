@@ -98,7 +98,7 @@ This writes:
 - Queue message: `graph-attachments-q`
 
 ### Notes
-- The Functions runtime will usually auto-create the `emails` container and `hr-attachments-q` queue when using Azurite. If it doesn’t, create them manually via Azure Storage Explorer or the Azurite API.
+- The Functions runtime will usually auto-create the `graphSnapshots` container and `graph-attachments-q` queue when using Azurite. If it doesn't, create them manually via Azure Storage Explorer or the Azurite API.
 
 ## Provision Azure resources
 Use the provisioning script (managed identity, Flex Consumption, Storage + Cosmos DB):

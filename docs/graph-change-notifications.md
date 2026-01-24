@@ -39,7 +39,7 @@ The PowerShell worker’s `profile.ps1` runs on cold start, even on Flex Consump
 
 1. Acquire a Microsoft Graph token using the Function’s managed identity via federated credentials.
 2. Discover/renew the existing `users` Graph subscription.
-3. Ensure the Event Grid partner topic has an event subscription that targets the queue (`hr-user-changes-q`) using the managed identity.
+3. Ensure the Event Grid partner topic has an event subscription that targets the queue (`graph-user-changes-q`) using the managed identity.
 4. Create a Graph subscription if none exists and activate the partner topic.
 
 This path is recommended because the Graph subscription (and the partner topic it creates) is time-bound and needs renewal. The queue-triggered function `process-user-changes` also handles lifecycle events like `SubscriptionReauthorizationRequired`.
