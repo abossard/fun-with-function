@@ -1,5 +1,17 @@
 param($Request)
 
+$sharedScript = Join-Path $PSScriptRoot ".." "shared/graph-subscription.ps1"
+if (Test-Path $sharedScript) {
+    . $sharedScript
+    try {
+        Ensure-GraphChangeSubscription
+    } catch {
+        Write-Warning "Graph subscription setup failed: $_"
+    }
+} else {
+    Write-Warning "Shared helper not found: $sharedScript"
+}
+
 $correlationId = $Request.Params.correlationId
 if (-not $correlationId) { $correlationId = $Request.Query.correlationId }
 if (-not $correlationId) { $correlationId = "test-" + ([guid]::NewGuid().ToString()) }
