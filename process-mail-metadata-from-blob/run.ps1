@@ -32,14 +32,14 @@ if (-not $blobUrl) {
 
 Write-Host "Metadata blob event received: $blobUrl"
 
-# Extract correlationId from blob URL
-$correlationId = $null
-if ($blobUrl -match "/emails/metadata/([^/]+)/metadata\.json") {
-    $correlationId = $matches[1]
+# Extract snapshotId from blob URL
+$snapshotId = $null
+if ($blobUrl -match "/graphSnapshots/metadata/([^/]+)/metadata\.json") {
+    $snapshotId = $matches[1]
 }
 
 # Parse URL to get storage account, container, and blob path
-# Example: https://anb888storage.blob.core.windows.net/emails/metadata/123/metadata.json
+# Example: https://anb888storage.blob.core.windows.net/graphSnapshots/metadata/123/metadata.json
 if ($blobUrl -match "https://([^.]+)\.blob\.core\.windows\.net/([^/]+)/(.+)") {
     $storageAccountName = $matches[1]
     $containerName = $matches[2]
@@ -68,25 +68,26 @@ try {
     return
 }
 
-# Use correlationId from metadata if available
-if (-not $correlationId -and $metadata.correlationId) {
-    $correlationId = $metadata.correlationId
+# Use snapshotId from metadata if available
+if (-not $snapshotId -and $metadata.snapshotId) {
+    $snapshotId = $metadata.snapshotId
 }
 
 $doc = [pscustomobject]@{
-    id             = $metadata.messageId
-    pk             = $metadata.fromEmail
-    correlationId  = $correlationId
-    fromEmail      = $metadata.fromEmail
-    fromName       = $metadata.fromName
-    subject        = $metadata.subject
-    receivedTime   = $metadata.receivedTime
-    hasAttachments = $metadata.hasAttachments
-    messageId      = $metadata.messageId
-    createdAt      = (Get-Date).ToString("o")
+    id                = $metadata.resourceId
+    pk                = $metadata.userId
+    snapshotId        = $snapshotId
+    userId            = $metadata.userId
+    displayName       = $metadata.displayName
+    userPrincipalName = $metadata.userPrincipalName
+    changeType        = $metadata.changeType
+    eventTime         = $metadata.eventTime
+    hasDataFiles      = $metadata.hasDataFiles
+    resourceId        = $metadata.resourceId
+    createdAt         = (Get-Date).ToString("o")
 }
 
-Write-Host "Writing document for correlationId $($doc.correlationId)"
+Write-Host "Writing document for snapshotId $($doc.snapshotId)"
 $cosmosDisabled = ($env:DISABLE_COSMOS_OUTPUT -eq "true")
 if (-not $cosmosDisabled) {
     Push-OutputBinding -Name cosmosDoc -Value $doc

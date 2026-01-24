@@ -45,13 +45,13 @@ var eventGridMetadataSubName = '${prefix}-egsub-metadata'
 // ============================================================
 // Variables - Resource Sub-Names
 // ============================================================
-var cosmosDatabaseName = 'hrdb'
-var cosmosContainerName = 'emails'
-var emailsContainerName = 'emails'
+var cosmosDatabaseName = 'graphdb'
+var cosmosContainerName = 'graphSnapshots'
+var emailsContainerName = 'graphSnapshots'
 var deploymentsContainerName = 'deployments'
-var attachmentsQueueName = 'hr-attachments-q'
-var metadataQueueName = 'hr-metadata-q'
-var userChangesQueueName = 'hr-user-changes-q'
+var attachmentsQueueName = 'graph-attachments-q'
+var metadataQueueName = 'graph-metadata-q'
+var userChangesQueueName = 'graph-user-changes-q'
 var partitionKeyPath = '/pk'
 
 var graphPartnerEventSubName = graphPartnerEventSubscriptionName == '' ? '${prefix}-graph-users-queue-sub' : graphPartnerEventSubscriptionName

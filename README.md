@@ -1,5 +1,5 @@
 # fun-with-function
-Example on how to use the Azure Integration Services
+Microsoft Graph + Azure Integration Services Showcase
 
 # Installation and usage
 - install AZ CLI, e.g. in Windows: `winget install --exact --id Microsoft.AzureCLI`
@@ -7,39 +7,47 @@ Example on how to use the Azure Integration Services
 - Install-Module PowerShellGet -Scope CurrentUser -Force -AllowClobber
 
 ## Architecture overview
-- Logic App (Consumption) ingests emails, writes metadata + attachments to Blob Storage under `emails/{correlationId}/`.
-- Blob-triggered Function (Flex Consumption, PowerShell 7.4) fires only for `emails/{correlationId}/metadata.json` and writes Cosmos DB docs (pk = sender email `/pk`).
-- Event Grid subscription (Managed Identity delivery) sends attachment BlobCreated events to a Storage Queue for decoupled attachment handling.
-- Attachment queue processor (PowerShell) logs/handles attachment events and writes a Cosmos DB record.
-- Single User-Assigned Managed Identity (UAMI) applied to Function App, used for Event Grid delivery, and enabled on Logic App; data-plane access uses MI (roles: Storage Blob Data Contributor + Queue Data Contributor, Cosmos DB Data Contributor as needed).
+- Microsoft Graph change notifications (users/groups/permissions) are sent to an Event Grid Partner Topic.
+- Event Grid Partner Topic routes change notifications to Storage Queues for decoupled processing.
+- Queue-triggered Functions (Flex Consumption, PowerShell 7.4) process Graph events and store snapshots in Cosmos DB.
+- Scheduled queries capture periodic Graph data snapshots and store them as JSON blobs.
+- Blob-triggered Functions process snapshot data and write enriched records to Cosmos DB (pk = userId `/pk`).
+- Event Grid subscription (Managed Identity delivery) sends BlobCreated events to Storage Queues for decoupled processing.
+- Single User-Assigned Managed Identity (UAMI) applied to Function App, used for Event Grid delivery; data-plane access uses MI (roles: Storage Blob Data Contributor + Queue Data Contributor, Cosmos DB Data Contributor as needed).
 - Application Insights enabled for the Function App.
-- Microsoft Graph change notifications flow through an Event Grid Partner Topic to a Storage Queue that triggers `process-user-changes`.
+- Graph subscription lifecycle management (creation/renewal) handled automatically via `profile.ps1` and `process-user-changes`.
 
 ### Message flow
 ```
-Email --> Logic App --> Blob Storage (metadata.json + attachments)
-		metadata.json --> Blob Trigger Function -> Cosmos DB
-		attachments/* --> Event Grid (MI delivery) -> Storage Queue -> Attachment handler
-		Microsoft Graph --> Event Grid Partner Topic -> Storage Queue -> User changes handler
+Microsoft Graph Change Notifications --> Event Grid Partner Topic --> Storage Queue --> process-user-changes Function --> Cosmos DB
+Scheduled Graph Queries --> Blob Storage (graphSnapshots/{snapshotId}/metadata.json + data files)
+		metadata.json --> Blob Trigger Function --> Cosmos DB
+		data files --> Event Grid (MI delivery) --> Storage Queue --> Data processor Function --> Cosmos DB
 ```
 
 ### Visual overview (Mermaid)
 ```mermaid
 flowchart LR
-	Email[Incoming email] --> LogicApp[Logic App<br/>When a new email arrives]
-	LogicApp -->|metadata.json + attachments| Blob[(Blob Storage)]
+	Graph[Microsoft Graph<br/>Change Notifications] --> PartnerTopic[Event Grid Partner Topic]
+	PartnerTopic --> UserQueue[(User Changes Queue)]
+	UserQueue --> UserChangesFn[process-user-changes Function]
+	UserChangesFn --> Cosmos[(Cosmos DB graphdb)]
+	
+	Schedule[Scheduled Queries] -->|Graph data snapshots| Blob[(Blob Storage)]
 	Blob -->|metadata.json| BlobTrigger[Blob-triggered Function]
-	BlobTrigger --> Cosmos[(Cosmos DB)]
+	BlobTrigger --> Cosmos
 	Blob -->|BlobCreated events| EventGrid[Event Grid]
 	EventGrid --> Queue[(Storage Queue)]
-	Queue --> AttachmentFn[Queue-triggered Function]
-	AttachmentFn --> Logs[Application Insights]
+	Queue --> DataFn[Queue-triggered Function]
+	DataFn --> Cosmos
+	DataFn --> Logs[Application Insights]
 ```
 
 ### Function folders
-- `S0-generate-test`: HTTP trigger to generate test metadata + attachment blobs and enqueue a BlobCreated CloudEvent.
-- `process-attachments-from-queue`: Queue trigger to process attachment events and write a Cosmos DB record.
-- `process-mail-metadata-from-blob`: Blob trigger to read metadata.json and write a Cosmos DB record.
+- `S0-generate-test`: HTTP trigger to generate test Graph snapshot data (metadata.json + data files) and simulate Graph change events.
+- `process-attachments-from-queue`: Queue trigger to process Graph data file events and write Cosmos DB records.
+- `process-mail-metadata-from-blob`: Blob trigger to read Graph snapshot metadata.json and write Cosmos DB records.
+- `process-user-changes`: Queue trigger to process Microsoft Graph change notifications from Event Grid Partner Topic.
 
 ## Run locally
 ### Prerequisites
@@ -65,7 +73,7 @@ Create a file at ./local.settings.json:
 		"AzureWebJobsStorage": "UseDevelopmentStorage=true",
 		"FUNCTIONS_WORKER_RUNTIME": "powershell",
 		"DISABLE_COSMOS_OUTPUT": "true",
-		"GRAPH_USER_CHANGES_QUEUE_NAME": "hr-user-changes-q"
+		"GRAPH_USER_CHANGES_QUEUE_NAME": "graph-user-changes-q"
 	}
 }
 ```
@@ -85,12 +93,12 @@ curl http://localhost:7071/api/test/generate/test-123
 ```
 
 This writes:
-- Blob: `emails/test-123/metadata.json`
-- Blob: `emails/test-123/attachments/fake.txt`
-- Queue message: `hr-attachments-q`
+- Blob: `graphSnapshots/metadata/test-123/metadata.json`
+- Blob: `graphSnapshots/attachments/test-123/fake.txt`
+- Queue message: `graph-attachments-q`
 
 ### Notes
-- The Functions runtime will usually auto-create the `emails` container and `hr-attachments-q` queue when using Azurite. If it doesn’t, create them manually via Azure Storage Explorer or the Azurite API.
+- The Functions runtime will usually auto-create the `graphSnapshots` container and `graph-attachments-q` queue when using Azurite. If it doesn't, create them manually via Azure Storage Explorer or the Azurite API.
 
 ## Provision Azure resources
 Use the provisioning script (managed identity, Flex Consumption, Storage + Cosmos DB):
@@ -117,8 +125,9 @@ Deploy the app-specific resources per function app:
 See [docs/graph-change-notifications.md](docs/graph-change-notifications.md) for the deep-dive on Graph subscriptions, Event Grid partner topics, and deployment options.
 
 ## Testing (end-to-end)
-1. Send a test email; Logic App writes metadata.json + attachments.
-2. Confirm blob path `emails/{correlationId}/metadata.json`.
-3. Verify attachment events arrive in `hr-attachments-q`.
-4. Check blob-trigger Function invocation; confirm Cosmos DB `emails` container has document with `pk=fromEmail` and `correlationId`.
-5. Inspect Application Insights traces for the correlationId.
+1. Trigger a test Graph event via S0-generate-test endpoint; generates test Graph snapshot data.
+2. Confirm blob path `graphSnapshots/metadata/{snapshotId}/metadata.json`.
+3. Verify data file events arrive in `graph-attachments-q`.
+4. Check blob-trigger Function invocation; confirm Cosmos DB `graphSnapshots` container has document with `pk=userId` and `snapshotId`.
+5. Verify Microsoft Graph change notifications are received in `graph-user-changes-q` and processed by `process-user-changes`.
+6. Inspect Application Insights traces for the snapshotId or Graph event data.

@@ -11,8 +11,8 @@
       "name": "outputDocument",
       "type": "cosmosDB",
       "direction": "out",
-      "databaseName": "hrdb",
-      "containerName": "emails",
+      "databaseName": "graphdb",
+      "containerName": "graphSnapshots",
       "connection": "CosmosDBConnection",
       "createIfNotExists": false
     }

@@ -32,30 +32,30 @@ if (-not $blobUrl) {
 	return
 }
 
-Write-Host "Attachment event received: $blobUrl"
-# https://anb99storage.blob.core.windows.net/emails/attachments/333333333333/fake.txt
-$correlationId = $null
-if ($blobUrl -match "/emails/attachments/([^/]+)/") {
-	$correlationId = $matches[1]
+Write-Host "Graph data file event received: $blobUrl"
+# https://anb99storage.blob.core.windows.net/graphSnapshots/attachments/333333333333/fake.txt
+$snapshotId = $null
+if ($blobUrl -match "/graphSnapshots/attachments/([^/]+)/") {
+	$snapshotId = $matches[1]
 } elseif ($blobUrl -match "/attachments/([^/]+)/") {
-	# Fallback if path omits leading 'emails/'
-	$correlationId = $matches[1]
-} elseif ($blobUrl -match "/emails/([^/]+)/attachments/") {
-	# Legacy pattern emails/{cid}/attachments/
-	$correlationId = $matches[1]
+	# Fallback if path omits leading 'graphSnapshots/'
+	$snapshotId = $matches[1]
+} elseif ($blobUrl -match "/graphSnapshots/([^/]+)/attachments/") {
+	# Alternative pattern graphSnapshots/{sid}/attachments/
+	$snapshotId = $matches[1]
 }
 
-if (-not $correlationId) {
-	Write-Warning "Unable to extract correlationId from blob url: $blobUrl"
+if (-not $snapshotId) {
+	Write-Warning "Unable to extract snapshotId from blob url: $blobUrl"
 }
 
 $doc = [pscustomobject]@{
-	id            = [guid]::NewGuid().ToString()
-	pk            = $correlationId
-	correlationId = $correlationId
-	attachmentUrl = $blobUrl
-	status        = "Processed"
-	processedAt   = (Get-Date).ToString("o")
+	id          = [guid]::NewGuid().ToString()
+	pk          = $snapshotId
+	snapshotId  = $snapshotId
+	dataFileUrl = $blobUrl
+	status      = "Processed"
+	processedAt = (Get-Date).ToString("o")
 }
 
 Start-Sleep -Seconds 120

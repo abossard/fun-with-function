@@ -29,7 +29,7 @@ function Ensure-GraphChangeSubscription {
     }
 
     if (-not $UserChangesQueueName) {
-        $UserChangesQueueName = "hr-user-changes-q"
+        $UserChangesQueueName = "graph-user-changes-q"
     }
 
     if (-not $StorageAccountName) {
