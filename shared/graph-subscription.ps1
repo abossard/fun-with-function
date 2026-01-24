@@ -139,10 +139,20 @@ function Ensure-GraphChangeSubscription {
         } | ConvertTo-Json -Depth 5
 
         try {
-            Invoke-RestMethod -Uri $eventSubUrl -Method PUT -Headers $ArmHeaders -Body $eventSubBody | Out-Null
-            Write-Host "Event Subscription ensured on Partner Topic"
+            $resp = Invoke-RestMethod -Uri $eventSubUrl -Method PUT -Headers $ArmHeaders -Body $eventSubBody -ErrorAction Stop
+            Write-Host "Event Subscription ensured on Partner Topic (name: $PartnerEventSubscriptionName)"
+            if ($resp) {
+                Write-Host "Event Subscription provisioningState: $($resp.properties.provisioningState)"
+            }
         } catch {
-            Write-Warning "Event Subscription creation failed: $_"
+            $details = $_.Exception.Response | ForEach-Object {
+                try {
+                    $reader = New-Object IO.StreamReader($_.GetResponseStream())
+                    $reader.ReadToEnd()
+                } catch { $null }
+            }
+            Write-Warning "Event Subscription creation failed: $($_.Exception.Message)"
+            if ($details) { Write-Warning "Response: $details" }
         }
     }
 

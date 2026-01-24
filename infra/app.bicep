@@ -41,6 +41,7 @@ var appInsightsName = '${prefix}-func-ai'
 var eventGridTopicName = '${prefix}-storage-topic'
 var eventGridSubName = '${prefix}-egsub-attachments'
 var eventGridMetadataSubName = '${prefix}-egsub-metadata'
+var logAnalyticsReaderRole = '73c42c96-874c-492b-b04d-ab87d138a893'
 
 // ============================================================
 // Variables - Resource Sub-Names
@@ -421,6 +422,9 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'GRAPH_USER_CHANGES_QUEUE_NAME', value: userChangesQueueName }
         { name: 'GRAPH_USER_GROUPS_QUEUE_NAME', value: userGroupsQueueName }
         { name: 'GRAPH_GROUP_QUERY_USERS', value: 'c152e1f1-79cd-4529-bf4c-c7972f1cb024' }
+        { name: 'LOG_QUERY_WORKSPACE_ID', value: logAnalyticsWorkspace.properties.customerId }
+        { name: 'LOG_QUERY_KQL', value: 'AzureDiagnostics | where ResourceProvider == "MICROSOFT.WEB" | take 50' }
+        { name: 'LOG_QUERY_TIMESPAN', value: 'PT1H' }
         { name: 'MANAGED_IDENTITY_RESOURCE_ID', value: managedIdentity.id }
       ]
     }
@@ -444,6 +448,17 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         version: '7.4'
       }
     }
+  }
+}
+
+// Log Analytics Reader for managed identity (needed for query API)
+resource logAnalyticsReaderAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(logAnalyticsWorkspace.id, managedIdentity.id, logAnalyticsReaderRole)
+  scope: logAnalyticsWorkspace
+  properties: {
+    principalId: managedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', logAnalyticsReaderRole)
   }
 }
 

@@ -1,12 +1,6 @@
 {
   "bindings": [
     {
-      "name": "Timer",
-      "type": "timerTrigger",
-      "direction": "in",
-      "schedule": "0 0 * * * *"
-    },
-    {
       "authLevel": "function",
       "type": "httpTrigger",
       "direction": "in",
@@ -26,5 +20,6 @@
       "type": "http",
       "direction": "out"
     }
-  ]
+  ],
+  "scriptFile": "run.ps1"
 }

@@ -1,6 +1,6 @@
 using namespace System.Net
 
-param($Timer)
+param($Timer, $Request)
 
 function Get-GraphToken {
     $graphAppClientId = $env:GRAPH_APP_CLIENT_ID
@@ -49,22 +49,50 @@ function Get-UserGroups {
     return $groups
 }
 
-try {
-    $usersSetting = $env:GRAPH_GROUP_QUERY_USERS
-    if (-not $usersSetting) {
-        Write-Warning "GRAPH_GROUP_QUERY_USERS is not set; skipping run."
-        return
+function Get-UsersToQuery {
+    param($Request)
+    $users = @()
+    if ($Request) {
+        $override = $null
+        if ($Request.Query.userId) { $override = $Request.Query.userId }
+        elseif ($Request.Body) {
+            try {
+                $body = if ($Request.Body -is [string]) { $Request.Body | ConvertFrom-Json -ErrorAction Stop } else { $Request.Body }
+                if ($body.userId) { $override = $body.userId }
+            } catch { }
+        }
+        if ($override) {
+            $users = @($override)
+            return $users
+        }
     }
 
-    $users = $usersSetting -split '[,; ]' | Where-Object { $_ -and $_.Trim() } | ForEach-Object { $_.Trim() }
+    $usersSetting = $env:GRAPH_GROUP_QUERY_USERS
+    if ($usersSetting) {
+        $users = $usersSetting -split '[,; ]' | Where-Object { $_ -and $_.Trim() } | ForEach-Object { $_.Trim() }
+    }
+    return $users
+}
+
+try {
+    $users = Get-UsersToQuery -Request $Request
     if (-not $users -or $users.Count -eq 0) {
-        Write-Warning "GRAPH_GROUP_QUERY_USERS contains no entries; skipping run."
+        Write-Warning "No users configured or provided; skipping run."
+        if ($Request) {
+            $resp = @{
+                StatusCode = 400
+                Body = @{ error = "No users specified. Set GRAPH_GROUP_QUERY_USERS or pass userId." } | ConvertTo-Json
+                Headers = @{ "Content-Type" = "application/json" }
+            }
+            Push-OutputBinding -Name Response -Value $resp
+        }
         return
     }
 
     $accessToken = Get-GraphToken
     $runId = [guid]::NewGuid().ToString()
     $timestamp = (Get-Date).ToUniversalTime().ToString("o")
+    $results = @()
 
     foreach ($user in $users) {
         try {
@@ -93,11 +121,36 @@ try {
 
             Push-OutputBinding -Name groupQueue -Value ($payload | ConvertTo-Json -Depth 6)
             Write-Host "Enqueued $($groupSummaries.Count) groups for user '$user'."
+            $results += @{
+                user = $user
+                totalGroups = $groupSummaries.Count
+            }
         } catch {
             Write-Warning "Failed to process user '$user': $_"
+            $results += @{
+                user = $user
+                error = $_.Exception.Message
+            }
         }
     }
+
+    if ($Request) {
+        $resp = @{
+            StatusCode = 200
+            Body = (@{ runId = $runId; timestamp = $timestamp; results = $results } | ConvertTo-Json -Depth 6)
+            Headers = @{ "Content-Type" = "application/json" }
+        }
+        Push-OutputBinding -Name Response -Value $resp
+    }
 } catch {
-    Write-Error "Scheduled group query failed: $_"
+    Write-Error "Group query failed: $_"
+    if ($Request) {
+        $resp = @{
+            StatusCode = 500
+            Body = @{ error = $_.Exception.Message } | ConvertTo-Json
+            Headers = @{ "Content-Type" = "application/json" }
+        }
+        Push-OutputBinding -Name Response -Value $resp
+    }
     throw
 }
