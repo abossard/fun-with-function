@@ -12,7 +12,7 @@
       "type": "cosmosDB",
       "direction": "out",
       "databaseName": "graphdb",
-      "containerName": "graphSnapshots",
+      "containerName": "graphsnapshots",
       "createIfNotExists": true,
       "connection": "CosmosDBConnection"
     }

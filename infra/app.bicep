@@ -46,12 +46,13 @@ var eventGridMetadataSubName = '${prefix}-egsub-metadata'
 // Variables - Resource Sub-Names
 // ============================================================
 var cosmosDatabaseName = 'graphdb'
-var cosmosContainerName = 'graphSnapshots'
-var emailsContainerName = 'graphSnapshots'
+var cosmosContainerName = 'graphsnapshots'
+var emailsContainerName = 'graphsnapshots'
 var deploymentsContainerName = 'deployments'
 var attachmentsQueueName = 'graph-attachments-q'
 var metadataQueueName = 'graph-metadata-q'
 var userChangesQueueName = 'graph-user-changes-q'
+var userGroupsQueueName = 'graph-user-groups-q'
 var partitionKeyPath = '/pk'
 
 var graphPartnerEventSubName = graphPartnerEventSubscriptionName == '' ? '${prefix}-graph-users-queue-sub' : graphPartnerEventSubscriptionName
@@ -129,6 +130,11 @@ resource metadataQueueResource 'Microsoft.Storage/storageAccounts/queueServices/
 resource userChangesQueueResource 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
   parent: queueService
   name: userChangesQueueName
+}
+
+resource userGroupsQueueResource 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
+  parent: queueService
+  name: userGroupsQueueName
 }
 
 // ============================================================
@@ -413,6 +419,8 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'GRAPH_PARTNER_TOPIC_NAME', value: graphPartnerTopicName }
         { name: 'GRAPH_PARTNER_EVENT_SUB_NAME', value: graphPartnerEventSubName }
         { name: 'GRAPH_USER_CHANGES_QUEUE_NAME', value: userChangesQueueName }
+        { name: 'GRAPH_USER_GROUPS_QUEUE_NAME', value: userGroupsQueueName }
+        { name: 'GRAPH_GROUP_QUERY_USERS', value: 'c152e1f1-79cd-4529-bf4c-c7972f1cb024' }
         { name: 'MANAGED_IDENTITY_RESOURCE_ID', value: managedIdentity.id }
       ]
     }

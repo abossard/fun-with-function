@@ -12,14 +12,14 @@
       "name": "metadataBlob",
       "type": "blob",
       "direction": "out",
-      "path": "graphSnapshots/metadata/{correlationId}/metadata.json",
+      "path": "graphsnapshots/metadata/{correlationId}/metadata.json",
       "connection": "AzureWebJobsStorage"
     },
     {
       "name": "attachmentBlob",
       "type": "blob",
       "direction": "out",
-      "path": "graphSnapshots/attachments/{correlationId}/fake.txt",
+      "path": "graphsnapshots/attachments/{correlationId}/fake.txt",
       "connection": "AzureWebJobsStorage"
     }
   ]

@@ -20,7 +20,7 @@ Microsoft Graph + Azure Integration Services Showcase
 ### Message flow
 ```
 Microsoft Graph Change Notifications --> Event Grid Partner Topic --> Storage Queue --> process-user-changes Function --> Cosmos DB
-Scheduled Graph Queries --> Blob Storage (graphSnapshots/{snapshotId}/metadata.json + data files)
+Scheduled Graph Queries --> Blob Storage (graphsnapshots/{snapshotId}/metadata.json + data files)
 		metadata.json --> Blob Trigger Function --> Cosmos DB
 		data files --> Event Grid (MI delivery) --> Storage Queue --> Data processor Function --> Cosmos DB
 ```
@@ -93,12 +93,12 @@ curl http://localhost:7071/api/test/generate/test-123
 ```
 
 This writes:
-- Blob: `graphSnapshots/metadata/test-123/metadata.json`
-- Blob: `graphSnapshots/attachments/test-123/fake.txt`
+- Blob: `graphsnapshots/metadata/test-123/metadata.json`
+- Blob: `graphsnapshots/attachments/test-123/fake.txt`
 - Queue message: `graph-attachments-q`
 
 ### Notes
-- The Functions runtime will usually auto-create the `graphSnapshots` container and `graph-attachments-q` queue when using Azurite. If it doesn't, create them manually via Azure Storage Explorer or the Azurite API.
+- The Functions runtime will usually auto-create the `graphsnapshots` container and `graph-attachments-q` queue when using Azurite. If it doesn't, create them manually via Azure Storage Explorer or the Azurite API.
 
 ## Provision Azure resources
 Use the provisioning script (managed identity, Flex Consumption, Storage + Cosmos DB):
@@ -126,8 +126,8 @@ See [docs/graph-change-notifications.md](docs/graph-change-notifications.md) for
 
 ## Testing (end-to-end)
 1. Trigger a test Graph event via S0-generate-test endpoint; generates test Graph snapshot data.
-2. Confirm blob path `graphSnapshots/metadata/{snapshotId}/metadata.json`.
+2. Confirm blob path `graphsnapshots/metadata/{snapshotId}/metadata.json`.
 3. Verify data file events arrive in `graph-attachments-q`.
-4. Check blob-trigger Function invocation; confirm Cosmos DB `graphSnapshots` container has document with `pk=userId` and `snapshotId`.
+4. Check blob-trigger Function invocation; confirm Cosmos DB `graphsnapshots` container has document with `pk=userId` and `snapshotId`.
 5. Verify Microsoft Graph change notifications are received in `graph-user-changes-q` and processed by `process-user-changes`.
 6. Inspect Application Insights traces for the snapshotId or Graph event data.

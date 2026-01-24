@@ -1,0 +1,17 @@
+{
+  "bindings": [
+    {
+      "name": "Timer",
+      "type": "timerTrigger",
+      "direction": "in",
+      "schedule": "0 0 * * * *"
+    },
+    {
+      "name": "groupQueue",
+      "type": "queue",
+      "direction": "out",
+      "queueName": "%GRAPH_USER_GROUPS_QUEUE_NAME%",
+      "connection": "AzureWebJobsStorage"
+    }
+  ]
+}

@@ -33,15 +33,15 @@ if (-not $blobUrl) {
 }
 
 Write-Host "Graph data file event received: $blobUrl"
-# https://anb99storage.blob.core.windows.net/graphSnapshots/attachments/333333333333/fake.txt
+# https://anb99storage.blob.core.windows.net/graphsnapshots/attachments/333333333333/fake.txt
 $snapshotId = $null
-if ($blobUrl -match "/graphSnapshots/attachments/([^/]+)/") {
+if ($blobUrl -match "/graphsnapshots/attachments/([^/]+)/") {
 	$snapshotId = $matches[1]
 } elseif ($blobUrl -match "/attachments/([^/]+)/") {
-	# Fallback if path omits leading 'graphSnapshots/'
+	# Fallback if path omits leading 'graphsnapshots/'
 	$snapshotId = $matches[1]
-} elseif ($blobUrl -match "/graphSnapshots/([^/]+)/attachments/") {
-	# Alternative pattern graphSnapshots/{sid}/attachments/
+} elseif ($blobUrl -match "/graphsnapshots/([^/]+)/attachments/") {
+	# Alternative pattern graphsnapshots/{sid}/attachments/
 	$snapshotId = $matches[1]
 }
 

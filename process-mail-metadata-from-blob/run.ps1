@@ -34,12 +34,12 @@ Write-Host "Metadata blob event received: $blobUrl"
 
 # Extract snapshotId from blob URL
 $snapshotId = $null
-if ($blobUrl -match "/graphSnapshots/metadata/([^/]+)/metadata\.json") {
+if ($blobUrl -match "/graphsnapshots/metadata/([^/]+)/metadata\.json") {
     $snapshotId = $matches[1]
 }
 
 # Parse URL to get storage account, container, and blob path
-# Example: https://anb888storage.blob.core.windows.net/graphSnapshots/metadata/123/metadata.json
+# Example: https://anb888storage.blob.core.windows.net/graphsnapshots/metadata/123/metadata.json
 if ($blobUrl -match "https://([^.]+)\.blob\.core\.windows\.net/([^/]+)/(.+)") {
     $storageAccountName = $matches[1]
     $containerName = $matches[2]
