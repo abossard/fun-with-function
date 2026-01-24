@@ -16,7 +16,26 @@ $resourceGroup = $env:RESOURCE_GROUP ?? "anbo-ints-usecase-3"
 $location = $env:LOCATION ?? "swedencentral"
 $azureSubscriptionId = $env:AZURE_SUBSCRIPTION_ID
 
-$partnerTopicName = "$prefix-graph-users-topic"
+$partnerTopicName = $env:GRAPH_PARTNER_TOPIC_NAME
+if (-not $partnerTopicName) {
+    $partnerTopicName = "$prefix-graph-users-topic"
+}
+
+$eventSubName = $env:GRAPH_PARTNER_EVENT_SUB_NAME
+if (-not $eventSubName) {
+    $eventSubName = "$prefix-graph-users-queue-sub"
+}
+
+$userChangesQueueName = $env:GRAPH_USER_CHANGES_QUEUE_NAME
+if (-not $userChangesQueueName) {
+    $userChangesQueueName = "hr-user-changes-q"
+}
+
+$managedIdentityResourceId = $env:MANAGED_IDENTITY_RESOURCE_ID
+$storageAccountName = $env:AzureWebJobsStorage__accountName
+if (-not $storageAccountName) {
+    $storageAccountName = "${prefix}storage"
+}
 
 # Skip if running locally or missing config
 if (-not $graphAppClientId -or -not $tenantId -or -not $azureSubscriptionId) {
@@ -97,7 +116,7 @@ try {
     
     # Look for any subscription on users resource (may have different partner topic name in URL)
     $ourSubscription = $existingSubscriptions.value | Where-Object { 
-        $_.resource -eq "users"
+        $_.resource -eq "users" -and $_.notificationUrl -match "partnertopic=$partnerTopicName"
     } | Select-Object -First 1
     
     if ($ourSubscription) {
@@ -127,17 +146,27 @@ try {
         "Content-Type" = "application/json"
     }
     $partnerTopicUrl = "https://management.azure.com/subscriptions/$azureSubscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.EventGrid/partnerTopics/$partnerTopicName"
-    $eventSubName = "$prefix-user-changes-sub"
     $eventSubUrl = "$partnerTopicUrl/eventSubscriptions/$eventSubName`?api-version=2024-06-01-preview"
-    $storageAccountId = "/subscriptions/$azureSubscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Storage/storageAccounts/${prefix}storage"
-    
+    $storageAccountId = "/subscriptions/$azureSubscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Storage/storageAccounts/$storageAccountName"
+
+    if (-not $managedIdentityResourceId) {
+        throw "MANAGED_IDENTITY_RESOURCE_ID is missing; cannot configure Event Grid delivery identity."
+    }
+
     $eventSubBody = @{
         properties = @{
-            destination = @{
-                endpointType = "StorageQueue"
-                properties = @{
-                    resourceId = $storageAccountId
-                    queueName = "hr-user-changes-q"
+            deliveryWithResourceIdentity = @{
+                identity = @{
+                    type = "UserAssigned"
+                    userAssignedIdentity = $managedIdentityResourceId
+                }
+                destination = @{
+                    endpointType = "StorageQueue"
+                    properties = @{
+                        resourceId = $storageAccountId
+                        queueName = $userChangesQueueName
+                        queueMessageTimeToLiveInSeconds = 604800
+                    }
                 }
             }
             eventDeliverySchema = "CloudEventSchemaV1_0"

@@ -14,7 +14,7 @@ set -e
 RESOURCE_GROUP="${RESOURCE_GROUP:-anbo-ints-usecase-3}"
 LOCATION="${LOCATION:-swedencentral}"
 PREFIX="${PREFIX:-anb888}"
-PARTNER_TOPIC_NAME="${PREFIX}-graph-users-topic"
+PARTNER_TOPIC_NAME="${GRAPH_PARTNER_TOPIC_NAME:-graph-users-topic}"
 GRAPH_APP_CLIENT_ID="${GRAPH_APP_CLIENT_ID:-bebcf6cd-b423-454d-a4a6-3cfd9d107886}"
 
 # Get Azure subscription ID
@@ -130,7 +130,7 @@ echo ""
 echo "Step 5: Creating event subscription to Storage Queue..."
 
 STORAGE_ACCOUNT_NAME="${PREFIX}storage"
-QUEUE_NAME="hr-user-changes-q"
+QUEUE_NAME="${GRAPH_USER_CHANGES_QUEUE_NAME:-hr-user-changes-q}"
 STORAGE_RESOURCE_ID="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Storage/storageAccounts/${STORAGE_ACCOUNT_NAME}"
 
 # Get UAMI resource ID for delivery identity
@@ -141,7 +141,7 @@ UAMI_RESOURCE_ID=$(az identity show \
 
 # Create event subscription with managed identity delivery
 az eventgrid partner topic event-subscription create \
-  --name "${PREFIX}-user-changes-sub" \
+  --name "${GRAPH_PARTNER_EVENT_SUB_NAME:-${PREFIX}-graph-users-queue-sub}" \
   --partner-topic-name "$PARTNER_TOPIC_NAME" \
   --resource-group "$RESOURCE_GROUP" \
   --endpoint-type "storagequeue" \

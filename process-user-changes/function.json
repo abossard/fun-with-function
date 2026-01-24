@@ -4,7 +4,7 @@
       "name": "QueueItem",
       "type": "queueTrigger",
       "direction": "in",
-      "queueName": "hr-user-changes-q",
+      "queueName": "%GRAPH_USER_CHANGES_QUEUE_NAME%",
       "connection": "AzureWebJobsStorage"
     },
     {
