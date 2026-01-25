@@ -9,18 +9,9 @@
       "route": "test/generate/{correlationId}"
     },
     {
-      "name": "metadataBlob",
-      "type": "blob",
-      "direction": "out",
-      "path": "%METADATA_BLOB_PATH%",
-      "connection": "AzureWebJobsStorage"
-    },
-    {
-      "name": "attachmentBlob",
-      "type": "blob",
-      "direction": "out",
-      "path": "%ATTACHMENT_BLOB_PATH%",
-      "connection": "AzureWebJobsStorage"
+      "name": "Response",
+      "type": "http",
+      "direction": "out"
     }
   ]
 }
