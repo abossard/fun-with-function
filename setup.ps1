@@ -78,7 +78,10 @@ param(
     [string]$GraphPartnerEventSubscriptionName = ""
 ,
     [Parameter(Mandatory = $false)]
-    [string]$CurrentUserObjectId = ""
+    [string]$CurrentUserObjectId = "",
+
+    [Parameter(Mandatory = $false)]
+    [string]$GraphUserChangesQueueName = "graph-user-changes-q"
 )
 
 Set-StrictMode -Version Latest
@@ -349,6 +352,7 @@ if ($Delete) {
             graphPartnerTopicName = $GraphPartnerTopicName
             graphPartnerEventSubscriptionName = $GraphPartnerEventSubscriptionName
             currentUserObjectId = $currentUserObjectId
+            graphUserChangesQueueName = $GraphUserChangesQueueName
         } `
         -ActionOnUnmanage DeleteAll `
         -DenySettingsMode None `

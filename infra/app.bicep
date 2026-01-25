@@ -25,6 +25,18 @@ param graphPartnerTopicName string = 'graph-users-topic'
 @description('Optional override for the Partner Topic event subscription name')
 param graphPartnerEventSubscriptionName string = ''
 
+@description('Queue name for Graph user change notifications')
+param graphUserChangesQueueName string = 'graph-user-changes-q'
+
+@description('Microsoft Graph subscription resource (e.g. users)')
+param graphResource string = 'users'
+
+@description('Microsoft Graph subscription changeType value')
+param graphChangeType string = 'created,updated,deleted'
+
+@description('Microsoft Graph subscription clientState value')
+param graphClientState string = ''
+
 @description('Optional objectId for current user to grant Event Grid permissions')
 param currentUserObjectId string = ''
 
@@ -52,9 +64,15 @@ var emailsContainerName = 'graphsnapshots'
 var deploymentsContainerName = 'deployments'
 var attachmentsQueueName = 'graph-attachments-q'
 var metadataQueueName = 'graph-metadata-q'
-var userChangesQueueName = 'graph-user-changes-q'
+var userChangesQueueName = graphUserChangesQueueName
 var userGroupsQueueName = 'graph-user-groups-q'
 var partitionKeyPath = '/pk'
+
+var metadataBlobPath = '${emailsContainerName}/metadata/{correlationId}/metadata.json'
+var attachmentBlobPath = '${emailsContainerName}/attachments/{correlationId}/fake.txt'
+var userGroupsTimerSchedule = '0 0 * * * *'
+
+var graphClientStateValue = graphClientState == '' ? '${prefix}-secret-state' : graphClientState
 
 var graphPartnerEventSubName = graphPartnerEventSubscriptionName == '' ? '${prefix}-graph-users-queue-sub' : graphPartnerEventSubscriptionName
 
@@ -421,6 +439,16 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'GRAPH_PARTNER_EVENT_SUB_NAME', value: graphPartnerEventSubName }
         { name: 'GRAPH_USER_CHANGES_QUEUE_NAME', value: userChangesQueueName }
         { name: 'GRAPH_USER_GROUPS_QUEUE_NAME', value: userGroupsQueueName }
+        { name: 'ATTACHMENTS_QUEUE_NAME', value: attachmentsQueueName }
+        { name: 'METADATA_QUEUE_NAME', value: metadataQueueName }
+        { name: 'COSMOS_DATABASE_NAME', value: cosmosDatabaseName }
+        { name: 'COSMOS_CONTAINER_NAME', value: cosmosContainerName }
+        { name: 'GRAPH_RESOURCE', value: graphResource }
+        { name: 'GRAPH_CHANGE_TYPE', value: graphChangeType }
+        { name: 'GRAPH_CLIENT_STATE', value: graphClientStateValue }
+        { name: 'USER_GROUPS_TIMER_SCHEDULE', value: userGroupsTimerSchedule }
+        { name: 'METADATA_BLOB_PATH', value: metadataBlobPath }
+        { name: 'ATTACHMENT_BLOB_PATH', value: attachmentBlobPath }
         { name: 'GRAPH_GROUP_QUERY_USERS', value: 'c152e1f1-79cd-4529-bf4c-c7972f1cb024' }
         { name: 'LOG_QUERY_WORKSPACE_ID', value: logAnalyticsWorkspace.properties.customerId }
         { name: 'LOG_QUERY_KQL', value: 'AzureDiagnostics | where ResourceProvider == "MICROSOFT.WEB" | take 50' }

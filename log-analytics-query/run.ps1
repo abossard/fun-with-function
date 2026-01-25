@@ -1,6 +1,6 @@
 using namespace System.Net
 
-param($Request, $outputDocument)
+param($Request)
 
 function New-HttpResponse {
     param([int]$StatusCode, $Body)

@@ -82,10 +82,11 @@ Write-Host "Resource ID (User ID): $resourceId"
 Write-Host "Tenant ID: $tenantId"
 
 # Validate client state (optional security check)
-$prefix = $env:PREFIX ?? "anb888"
-$expectedClientState = "$prefix-secret-state"
-if ($clientState -and $clientState -ne $expectedClientState) {
+$expectedClientState = $env:GRAPH_CLIENT_STATE
+if ($clientState -and $expectedClientState -and $clientState -ne $expectedClientState) {
     Write-Warning "Client state mismatch - possible spoofed event"
+} elseif ($clientState -and -not $expectedClientState) {
+    Write-Warning "Client state validation skipped (GRAPH_CLIENT_STATE not set)"
 }
 
 # Process the user change

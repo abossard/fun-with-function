@@ -4,15 +4,7 @@
       "name": "Timer",
       "type": "timerTrigger",
       "direction": "in",
-      "schedule": "0 0 * * * *"
-    },
-    {
-      "authLevel": "function",
-      "type": "httpTrigger",
-      "direction": "in",
-      "name": "Request",
-      "methods": [ "get", "post" ],
-      "route": "groups/run"
+      "schedule": "%USER_GROUPS_TIMER_SCHEDULE%"
     },
     {
       "name": "groupQueue",
@@ -20,11 +12,6 @@
       "direction": "out",
       "queueName": "%GRAPH_USER_GROUPS_QUEUE_NAME%",
       "connection": "AzureWebJobsStorage"
-    },
-    {
-      "name": "Response",
-      "type": "http",
-      "direction": "out"
     }
   ]
 }

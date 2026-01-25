@@ -11,8 +11,8 @@
       "name": "outputDocument",
       "type": "cosmosDB",
       "direction": "out",
-      "databaseName": "graphdb",
-      "containerName": "graphsnapshots",
+      "databaseName": "%COSMOS_DATABASE_NAME%",
+      "containerName": "%COSMOS_CONTAINER_NAME%",
       "connection": "CosmosDBConnection",
       "createIfNotExists": false
     }
