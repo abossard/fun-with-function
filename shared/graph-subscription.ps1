@@ -116,8 +116,7 @@ function Ensure-GraphChangeSubscription {
             return
         }
 
-        # Use stable API for event subscriptions (partner topic already exists by now)
-        $eventSubUrl = "$PartnerTopicUrl/eventSubscriptions/$PartnerEventSubscriptionName`?api-version=2021-12-01"
+        $eventSubUrl = "$PartnerTopicUrl/eventSubscriptions/$PartnerEventSubscriptionName`?api-version=2025-07-15-preview"
 
         $eventSubBody = @{
             properties = @{
