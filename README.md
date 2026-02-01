@@ -1,6 +1,7 @@
 # fun-with-function
 Microsoft Graph + Azure Integration Services Showcase
 
+
 # Installation and usage
 - install AZ CLI, e.g. in Windows: `winget install --exact --id Microsoft.AzureCLI`
 - ./provision.ps1 <name-prefix> <resource-group>
