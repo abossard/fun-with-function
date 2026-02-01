@@ -43,7 +43,7 @@ $requiredSettings = @(
 
 $missingSettings = @()
 foreach ($name in $requiredSettings) {
-    if (-not $env:$name) { $missingSettings += $name }
+    if (-not (Get-Item -Path "Env:\$name" -ErrorAction SilentlyContinue)) { $missingSettings += $name }
 }
 
 function Get-GraphToken {
