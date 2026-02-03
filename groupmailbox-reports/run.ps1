@@ -23,7 +23,7 @@ Connect-ExchangeOnline `
 Write-Host "[groupmailbox-reports] Connected to Exchange Online."
  
 # Hole alle Mailboxen vom Typ Shared und GroupMailbox
-$mailboxes = Get-Mailbox -ResultSize 100
+$mailboxes = Get-EXOMailbox -RecipientTypeDetails SharedMailbox -ResultSize Unlimited -PropertySets All
 $groupMailboxCount = $mailboxes.Count
 
 Write-Host "[groupmailbox-reports] Retrieved $groupMailboxCount shared mailboxes."
@@ -36,62 +36,21 @@ $report = foreach ($mb in $mailboxes) {
     }
     # Hole Statistiken
     $stat = Get-MailboxStatistics -Identity $mb.Identity
-    $statJson = $stat | ConvertTo-Json -Depth 6
-    $statObj = $statJson | ConvertFrom-Json
 
-    # Quota-Werte aus Get-Mailbox
-    $mbDetail = Get-Mailbox -Identity $mb.Identity
-
-    # Quotas können 'Unlimited' oder Grössenwerte sein
-    $issueWarningQuota = $mbDetail.IssueWarningQuota
-    $prohibitSendQuota = $mbDetail.ProhibitSendQuota
-    $prohibitSendReceiveQuota = $mbDetail.ProhibitSendReceiveQuota
+    $mailboxProps = $mb | Select-Object -Property *
+    $statProps    = $stat | Select-Object -Property *
  
-    # Hilfsfunktion: parse Quota (liefert Bytes oder $null wenn Unlimited)
-    function Parse-QuotaToBytes {
-        param([string]$q)
-
-        if (-not $q) { return $null }
-        if ($q -eq 'Unlimited') { return $null }
-
-        # Beispieleingaben: "100 GB", "20 MB (20,971,520 bytes)" oder "10.00 GB (10,737,418,240 bytes)"
-        if ($q -match '\((\d[\d,]*) bytes\)') {
-            $b = ($matches[1] -replace ',','')
-            return [long]::Parse($b)
-        }
-
-        # Falls kein bytes-Teil, parsen wir einfache Einheiten
-        if ($q -match '([\d\.,]+)\s*(KB|MB|GB|TB)') {
-            $num = [double]($matches[1] -replace ',','')
-            switch ($matches[2]) {
-                'KB' { return [long]($num * 1KB) }
-                'MB' { return [long]($num * 1MB) }
-                'GB' { return [long]($num * 1GB) }
-                'TB' { return [long]($num * 1TB) }
-            }
-        }        
-        return $null
-
+    
+    [PSCustomObject]@{
+        Mailbox             = $mailboxProps
+        Statistics          = $statProps
     }
- 
-    $warnBytes = Parse-QuotaToBytes $issueWarningQuota.ToString()
-
-    $sendBytes = Parse-QuotaToBytes $prohibitSendQuota.ToString()
-
-    $sendRecvBytes = Parse-QuotaToBytes $prohibitSendReceiveQuota.ToString()
- 
-    $statRow = [ordered]@{}
-    foreach ($prop in $statObj.PSObject.Properties) {
-        $statRow[$prop.Name] = $prop.Value
-    }
-    $statRow["GroupMailboxCount"] = $groupMailboxCount
-    [PSCustomObject]$statRow
-
 }
  
-# Ergebnis nach Grösse absteigend sortieren und als CSV im HTTP-Response zurückgeben
+ # Ergebnis nach Grösse absteigend sortieren und als CSV im HTTP-Response zurückgeben
 
-$csvLines = $report | Sort-Object -Property TotalItemSize_Bytes -Descending | ConvertTo-Csv -NoTypeInformation
+$sortedReport = $report | Sort-Object -Property TotalItemSize_Bytes -Descending
+$csvLines = $sortedReport | ConvertTo-Csv -NoTypeInformation
 $csvBody = $csvLines -join "`n"
 
 Write-Host "[groupmailbox-reports] CSV report generated. Rows: $($report.Count)"
@@ -101,25 +60,21 @@ if ($report.Count -gt 0) {
     $statPropertyNames = $report[0].PSObject.Properties.Name
 }
 
-$statsDoc = [pscustomobject]@{
-    id                  = [guid]::NewGuid().ToString()
-    pk                  = "groupmailbox-reports"
-    generatedAt         = (Get-Date).ToString("o")
-    groupMailboxCount   = $groupMailboxCount
-    rowCount            = $report.Count
-    statPropertyNames   = $statPropertyNames
+Write-Host "[groupmailbox-reports] Cosmos DB output binding disabled."
+
+$responseBody = [pscustomobject]@{
+    generatedAt       = (Get-Date).ToString("o")
+    groupMailboxCount = $groupMailboxCount
+    csv               = $csvBody
+    mailboxes         = $sortedReport
 }
 
-Push-OutputBinding -Name cosmosDoc -Value $statsDoc
-Write-Host "[groupmailbox-reports] Stats document sent to Cosmos DB."
-
 $headers = @{
-    "Content-Type" = "text/csv; charset=utf-8"
-    "Content-Disposition" = "attachment; filename=GroupMailboxes_Quota.csv"
+    "Content-Type" = "application/json; charset=utf-8"
     "X-GroupMailbox-Count" = "$groupMailboxCount"
 }
 
-$resp = New-HttpResponse -StatusCode 200 -Body $csvBody -Headers $headers
+$resp = New-HttpResponse -StatusCode 200 -Body ($responseBody | ConvertTo-Json -Depth 10) -Headers $headers
 Push-OutputBinding -Name Response -Value $resp
 
 Write-Host "[groupmailbox-reports] Response sent."

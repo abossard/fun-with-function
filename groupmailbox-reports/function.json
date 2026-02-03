@@ -12,16 +12,6 @@
       "name": "Response",
       "type": "http",
       "direction": "out"
-    },
-    {
-      "name": "cosmosDoc",
-      "type": "cosmosDB",
-      "direction": "out",
-      "databaseName": "%COSMOS_DATABASE_NAME%",
-      "containerName": "mailstats",
-      "partitionKey": "/pk",
-      "createIfNotExists": true,
-      "connection": "CosmosDBConnection"
     }
   ],
   "scriptFile": "run.ps1"
