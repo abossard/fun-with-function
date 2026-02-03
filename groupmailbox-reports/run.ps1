@@ -22,17 +22,6 @@ Connect-ExchangeOnline `
 
 Write-Host "[groupmailbox-reports] Connected to Exchange Online."
  
-# Hilfsfunktion: formatiere Bytes in lesbare Grössen
-
-function Format-Bytes {
-    param([long]$Bytes)
-    if ($Bytes -ge 1TB) { "{0:N2} TB" -f ($Bytes / 1TB) }
-    elseif ($Bytes -ge 1GB) { "{0:N2} GB" -f ($Bytes / 1GB) }
-    elseif ($Bytes -ge 1MB) { "{0:N2} MB" -f ($Bytes / 1MB) }
-    elseif ($Bytes -ge 1KB) { "{0:N2} KB" -f ($Bytes / 1KB) }
-    else { "$Bytes Bytes" }
-}
- 
 # Hole alle Mailboxen vom Typ Shared und GroupMailbox
 $mailboxes = Get-Mailbox -ResultSize 100
 $groupMailboxCount = $mailboxes.Count
@@ -47,15 +36,8 @@ $report = foreach ($mb in $mailboxes) {
     }
     # Hole Statistiken
     $stat = Get-MailboxStatistics -Identity $mb.Identity
-    $totalBytes = $null
-    $totalItemSizeText = $stat.TotalItemSize.ToString()
-    if ($totalItemSizeText -match '\((\d[\d,]*) bytes\)') {
-        $bytesStr = $matches[1] -replace ',', ''
-        [long]$totalBytes = [long]::Parse($bytesStr)
-    }
- 
-    # Falls nicht extrahiert, setze 0
-    if (-not $totalBytes) { $totalBytes = 0 }
+    $statJson = $stat | ConvertTo-Json -Depth 6
+    $statObj = $statJson | ConvertFrom-Json
 
     # Quota-Werte aus Get-Mailbox
     $mbDetail = Get-Mailbox -Identity $mb.Identity
@@ -98,22 +80,12 @@ $report = foreach ($mb in $mailboxes) {
 
     $sendRecvBytes = Parse-QuotaToBytes $prohibitSendReceiveQuota.ToString()
  
-    [PSCustomObject]@{
-        DisplayName = $mb.DisplayName
-        PrimarySmtpAddress = $mb.PrimarySmtpAddress.ToString()
-        RecipientTypeDetails = $mb.RecipientTypeDetails
-        GroupMailboxCount = $groupMailboxCount
-        ItemCount = $stat.ItemCount
-        TotalItemSize_Bytes = $totalBytes
-        TotalItemSize = Format-Bytes -Bytes $totalBytes
-        IssueWarningQuota = $issueWarningQuota.ToString()
-        IssueWarningQuota_Bytes = if ($warnBytes) { $warnBytes } else { $null }
-        ProhibitSendQuota = $prohibitSendQuota.ToString()
-        ProhibitSendQuota_Bytes = if ($sendBytes) { $sendBytes } else { $null }
-        ProhibitSendReceiveQuota = $prohibitSendReceiveQuota.ToString()
-        ProhibitSendReceiveQuota_Bytes = if ($sendRecvBytes) { $sendRecvBytes } else { $null }
-        LastLogonTime = $stat.LastLogonTime
+    $statRow = [ordered]@{}
+    foreach ($prop in $statObj.PSObject.Properties) {
+        $statRow[$prop.Name] = $prop.Value
     }
+    $statRow["GroupMailboxCount"] = $groupMailboxCount
+    [PSCustomObject]$statRow
 
 }
  
@@ -123,6 +95,23 @@ $csvLines = $report | Sort-Object -Property TotalItemSize_Bytes -Descending | Co
 $csvBody = $csvLines -join "`n"
 
 Write-Host "[groupmailbox-reports] CSV report generated. Rows: $($report.Count)"
+
+$statPropertyNames = @()
+if ($report.Count -gt 0) {
+    $statPropertyNames = $report[0].PSObject.Properties.Name
+}
+
+$statsDoc = [pscustomobject]@{
+    id                  = [guid]::NewGuid().ToString()
+    pk                  = "groupmailbox-reports"
+    generatedAt         = (Get-Date).ToString("o")
+    groupMailboxCount   = $groupMailboxCount
+    rowCount            = $report.Count
+    statPropertyNames   = $statPropertyNames
+}
+
+Push-OutputBinding -Name cosmosDoc -Value $statsDoc
+Write-Host "[groupmailbox-reports] Stats document sent to Cosmos DB."
 
 $headers = @{
     "Content-Type" = "text/csv; charset=utf-8"
