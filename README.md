@@ -1,134 +1,107 @@
 # fun-with-function
-Microsoft Graph + Azure Integration Services Showcase
+Microsoft Graph + Azure Integration Services (PowerShell)
 
 
 # Installation and usage
 - install AZ CLI, e.g. in Windows: `winget install --exact --id Microsoft.AzureCLI`
 - ./provision.ps1 <name-prefix> <resource-group>
 - Install-Module PowerShellGet -Scope CurrentUser -Force -AllowClobber
+  
+## Overview (ideas)
+- Graph change notifications → Event Grid Partner Topic → Storage Queue → Cosmos DB
+- Scheduled Graph queries → Blob Storage → Functions → Cosmos DB
+- Event Grid (blob events) → Queue → Function → Cosmos DB
 
-## Architecture overview
-- Microsoft Graph change notifications (users/groups/permissions) are sent to an Event Grid Partner Topic.
-- Event Grid Partner Topic routes change notifications to Storage Queues for decoupled processing.
-- Queue-triggered Functions (Flex Consumption, PowerShell 7.4) process Graph events and store snapshots in Cosmos DB.
-- Scheduled queries capture periodic Graph data snapshots and store them as JSON blobs.
-- Blob-triggered Functions process snapshot data and write enriched records to Cosmos DB (pk = userId `/pk`).
-- Event Grid subscription (Managed Identity delivery) sends BlobCreated events to Storage Queues for decoupled processing.
-- Single User-Assigned Managed Identity (UAMI) applied to Function App, used for Event Grid delivery; data-plane access uses MI (roles: Storage Blob Data Contributor + Queue Data Contributor, Cosmos DB Data Contributor as needed).
-- Application Insights enabled for the Function App.
-- Graph subscription lifecycle management (creation/renewal) handled automatically via `profile.ps1` and `process-user-changes`.
-
-### Message flow
-```
-Microsoft Graph Change Notifications --> Event Grid Partner Topic --> Storage Queue --> process-user-changes Function --> Cosmos DB
-Scheduled Graph Queries --> Blob Storage (graphsnapshots/{snapshotId}/metadata.json + data files)
-		metadata.json --> Blob Trigger Function --> Cosmos DB
-		data files --> Event Grid (MI delivery) --> Storage Queue --> Data processor Function --> Cosmos DB
-```
-
-### Visual overview (Mermaid)
+## Visual overview
 ```mermaid
 flowchart LR
-	Graph[Microsoft Graph<br/>Change Notifications] --> PartnerTopic[Event Grid Partner Topic]
-	PartnerTopic --> UserQueue[(User Changes Queue)]
-	UserQueue --> UserChangesFn[process-user-changes Function]
-	UserChangesFn --> Cosmos[(Cosmos DB graphdb)]
-	
-	Schedule[Scheduled Queries] -->|Graph data snapshots| Blob[(Blob Storage)]
-	Blob -->|metadata.json| BlobTrigger[Blob-triggered Function]
-	BlobTrigger --> Cosmos
-	Blob -->|BlobCreated events| EventGrid[Event Grid]
-	EventGrid --> Queue[(Storage Queue)]
-	Queue --> DataFn[Queue-triggered Function]
-	DataFn --> Cosmos
-	DataFn --> Logs[Application Insights]
+  %% Graph change notifications
+  Graph[Microsoft Graph] --> PartnerTopic[Event Grid Partner Topic]
+  PartnerTopic --> UserQueue[(User Changes Queue)]
+  UserQueue --> UserChangesFn[process-user-changes\nStore change notifications in Cosmos DB]
+  UserChangesFn --> Cosmos[(Cosmos DB)]
+
+  %% Scheduled Graph queries
+  Scheduler[Timer] --> ScheduledGroupsFn[scheduled-user-groups\nQuery Graph on a schedule and enqueue work]
+  HttpCaller[HTTP] --> ScheduledGroupsHttpFn[scheduled-user-groups-http\nHTTP wrapper to trigger scheduled-user-groups]
+  ScheduledGroupsHttpFn --> ScheduledGroupsFn
+  ScheduledGroupsFn --> Blob[(Blob Storage)]
+  Blob --> MetaFn[process-mail-metadata-from-blob\nIngest blob metadata to Cosmos DB]
+
+  %% Blob events and attachments
+  Blob --> EventGrid[Event Grid]
+  EventGrid --> DataQueue[(Data Queue)]
+  DataQueue --> DataFn[process-attachments-from-queue\nProcess attachment files and store in Cosmos DB]
+  MetaFn --> Cosmos
+  DataFn --> Cosmos
+
+  %% Setup verification
+  VerifyCaller[HTTP] --> VerifyFn[S0-generate-test\nVerify Graph subscription + Event Grid setup]
 ```
 
-### Function folders
-- `S0-generate-test`: HTTP trigger to generate test Graph snapshot data (metadata.json + data files) and simulate Graph change events.
-- `process-attachments-from-queue`: Queue trigger to process Graph data file events and write Cosmos DB records.
-- `process-mail-metadata-from-blob`: Blob trigger to read Graph snapshot metadata.json and write Cosmos DB records.
-- `process-user-changes`: Queue trigger to process Microsoft Graph change notifications from Event Grid Partner Topic.
+## Folders (what they do)
+- [S0-generate-test](S0-generate-test): verify setup HTTP function
+- [process-user-changes](process-user-changes): Graph change notifications → Cosmos
+- [process-mail-metadata-from-blob](process-mail-metadata-from-blob): blob metadata → Cosmos
+- [process-attachments-from-queue](process-attachments-from-queue): data file events → Cosmos
+- [scheduled-user-groups](scheduled-user-groups): scheduled Graph queries → queue
+- [scheduled-user-groups-http](scheduled-user-groups-http): HTTP wrapper for scheduled-user-groups
+- [shared/graph-subscription.ps1](shared/graph-subscription.ps1): Graph + Event Grid setup helper
+- [infra/app.bicep](infra/app.bicep): infra and app settings
 
-## Run locally
-### Prerequisites
-- Azure Functions Core Tools v4
-- PowerShell 7.x (tested with 7.4)
-- Node.js 18+ (for Azurite)
-- Azurite (local Storage emulator)
+## Graph change notifications (PowerShell setup)
+Use [setup.ps1](setup.ps1). It wires up:
+- Graph app settings
+- Partner topic activation
+- Event subscription to queue
 
-### 1) Start Azurite (Storage emulator)
-Run this from the repo root:
-
-```
-npx azurite --location ./azurite --silent
-```
-
-### 2) Create local settings
-Create a file at ./local.settings.json:
-
-```json
-{
-	"IsEncrypted": false,
-	"Values": {
-		"AzureWebJobsStorage": "UseDevelopmentStorage=true",
-		"FUNCTIONS_WORKER_RUNTIME": "powershell",
-		"DISABLE_COSMOS_OUTPUT": "true",
-		"GRAPH_USER_CHANGES_QUEUE_NAME": "graph-user-changes-q"
-	}
-}
-```
-
-> Set `DISABLE_COSMOS_OUTPUT=false` and provide a real `CosmosDBConnection` value if you want to write to Cosmos DB locally or in Azure.
-
-### 3) Start Functions
-From the repo root:
-
-```
-func start --script-root .
-```
-
-### 4) Generate a test payload
-```
-curl http://localhost:7071/api/test/generate/test-123
-```
-
-This writes:
-- Blob: `graphsnapshots/metadata/test-123/metadata.json`
-- Blob: `graphsnapshots/attachments/test-123/fake.txt`
-- Queue message: `graph-attachments-q`
-
-### Notes
-- The Functions runtime will usually auto-create the `graphsnapshots` container and `graph-attachments-q` queue when using Azurite. If it doesn't, create them manually via Azure Storage Explorer or the Azurite API.
-
-## Provision Azure resources
-Use the provisioning script (managed identity, Flex Consumption, Storage + Cosmos DB):
-
-```
-./provision.ps1 <name-prefix> <resource-group>
-```
-
-### Resource-group shared setup (once per RG)
-Deploy the shared resources (partner configuration) once per resource group:
-
+Steps:
+1) Deploy shared RG resources (once per RG)
 ```
 ./setup.ps1 -Prefix <name-prefix> -ResourceGroup <resource-group> -DeploySharedResources
 ```
 
-### Function app setup (per app)
-Deploy the app-specific resources per function app:
-
+2) Deploy the app
 ```
 ./setup.ps1 -Prefix <name-prefix> -ResourceGroup <resource-group>
 ```
 
-## Microsoft Graph change notifications
-See [docs/graph-change-notifications.md](docs/graph-change-notifications.md) for the deep-dive on Graph subscriptions, Event Grid partner topics, and deployment options.
+3) Verify setup (HTTP)
+```
+curl https://<app>.azurewebsites.net/api/test/generate/verify
+```
 
-## Testing (end-to-end)
-1. Trigger a test Graph event via S0-generate-test endpoint; generates test Graph snapshot data.
-2. Confirm blob path `graphsnapshots/metadata/{snapshotId}/metadata.json`.
-3. Verify data file events arrive in `graph-attachments-q`.
-4. Check blob-trigger Function invocation; confirm Cosmos DB `graphsnapshots` container has document with `pk=userId` and `snapshotId`.
-5. Verify Microsoft Graph change notifications are received in `graph-user-changes-q` and processed by `process-user-changes`.
-6. Inspect Application Insights traces for the snapshotId or Graph event data.
+What it checks:
+- Graph subscription (id, expiration, notificationUrl)
+- Partner topic state
+- Partner event subscription state
+
+See:
+- [S0-generate-test/run.ps1](S0-generate-test/run.ps1)
+- [shared/graph-subscription.ps1](shared/graph-subscription.ps1)
+- [infra/app.bicep](infra/app.bicep)
+
+## Local dev (short)
+1) Start Azurite
+```
+npx azurite --location ./azurite --silent
+```
+
+2) local.settings.json
+```
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "powershell"
+  }
+}
+```
+
+3) Run
+```
+func start --script-root .
+```
+
+## Reference docs
+- [docs/graph-change-notifications.md](docs/graph-change-notifications.md)

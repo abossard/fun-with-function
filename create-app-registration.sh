@@ -24,6 +24,10 @@ GRAPH_API_ID="00000003-0000-0000-c000-000000000000"
 
 # Directory.Read.All app role ID (application permission)
 DIRECTORY_READ_ALL_ID="7ab1d382-f21e-4acd-a863-ba3e13f7da61"
+# User.Read.All app role ID (application permission)
+USER_READ_ALL_ID="df021288-bdef-4463-88db-98f22de89214"
+# Group.Read.All app role ID (application permission)
+GROUP_READ_ALL_ID="5b567255-7703-4780-807c-7be8301ae99b"
 
 # Add Directory.Read.All permission (requires admin consent)
 az ad app permission add \
@@ -32,6 +36,22 @@ az ad app permission add \
   --api-permissions "$DIRECTORY_READ_ALL_ID=Role"
 
 echo "Added Directory.Read.All permission (requires admin consent)"
+
+# Add User.Read.All permission (requires admin consent)
+az ad app permission add \
+  --id "$APP_ID" \
+  --api "$GRAPH_API_ID" \
+  --api-permissions "$USER_READ_ALL_ID=Role"
+
+echo "Added User.Read.All permission (requires admin consent)"
+
+# Add Group.Read.All permission (requires admin consent)
+az ad app permission add \
+  --id "$APP_ID" \
+  --api "$GRAPH_API_ID" \
+  --api-permissions "$GROUP_READ_ALL_ID=Role"
+
+echo "Added Group.Read.All permission (requires admin consent)"
 
 # Create service principal for the app
 SP_ID=$(az ad sp create --id "$APP_ID" --query id -o tsv 2>/dev/null || \
