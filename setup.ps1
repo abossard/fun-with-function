@@ -139,6 +139,20 @@ function Deploy-FunctionCode {
         [string]$SourcePath
     )
     
+    Write-Phase "Local Dependencies"
+    $modulesPath = Join-Path $PSScriptRoot "modules"
+    if (-not (Test-Path $modulesPath)) {
+        Write-Host "Preparing local PowerShell modules for Flex Consumption..."
+        $fetchModulesScript = Join-Path $PSScriptRoot "fetch-modules.ps1"
+        if (Test-Path $fetchModulesScript) {
+            & $fetchModulesScript
+        } else {
+            Write-Host "Warning: fetch-modules.ps1 not found, skipping module download." -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "Modules folder exists, skipping download. Delete 'modules/' to force refresh."
+    }
+
     Write-Phase "Deploy Function Code"
     
     # Verify function app exists
@@ -303,21 +317,7 @@ if ($Delete) {
         Write-Host "Stack '$stackName' does not exist." -ForegroundColor Yellow
     }
 } else {
-    # Download PowerShell modules for Flex Consumption (only if modules folder missing)
-    Write-Phase "Local Dependencies"
-    $modulesPath = Join-Path $PSScriptRoot "modules"
-    if (-not (Test-Path $modulesPath)) {
-        Write-Host "Preparing local PowerShell modules for Flex Consumption..."
-        $fetchModulesScript = Join-Path $PSScriptRoot "fetch-modules.ps1"
-        if (Test-Path $fetchModulesScript) {
-            & $fetchModulesScript
-        } else {
-            Write-Host "Warning: fetch-modules.ps1 not found, skipping module download." -ForegroundColor Yellow
-        }
-    } else {
-        Write-Host "Modules folder exists, skipping download. Delete 'modules/' to force refresh."
-    }
-    
+    # Download PowerShell modules for Flex Consumption (only if modules folder missing)    
     # Create or update the stack
     Write-Phase "Deploy Stack"
     

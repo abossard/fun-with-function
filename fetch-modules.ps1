@@ -1,6 +1,6 @@
 param(
-    [string]$ModulePath = "modules",
-    [string[]]$Modules = @("Az.Accounts", "Az.Storage", "Az.CosmosDB")
+    [string]$ModulePath = "Modules",
+    [string[]]$Modules = @("Az.Accounts", "Az.Storage", "Az.CosmosDB", "ExchangeOnlineManagement")
 )
 
 Set-StrictMode -Version Latest
