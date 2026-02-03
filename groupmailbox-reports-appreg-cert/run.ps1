@@ -1,4 +1,4 @@
-param($request)
+param($Request)
 
 # HTTP Response helper
 function New-HttpResponse {
@@ -9,19 +9,50 @@ function New-HttpResponse {
     )
     return @{ StatusCode = $StatusCode; Body = $Body; Headers = $Headers }
 }
-Write-Host "[groupmailbox-reports] Starting function execution sooon."
 
 Import-Module ExchangeOnlineManagement -ErrorAction Stop -Force
 
-Write-Host "[groupmailbox-reports] Starting function execution."
- 
-Connect-ExchangeOnline `
-  -ManagedIdentity `
-  -Organization MngEnvMCAP462928.onmicrosoft.com `
-  -ManagedIdentityAccountId 1126b55e-26ae-492e-8701-3e1b7af612b8
+$appId = $env:GRAPH_APP_CLIENT_ID
+$certBase64 = $env:EXO_APP_PFX_BASE64
+$certPassword = $env:EXO_APP_PFX_PASSWORD
 
-Write-Host "[groupmailbox-reports] Connected to Exchange Online."
- 
+if (-not $appId) {
+    $resp = New-HttpResponse -StatusCode 500 -Body 'Missing app setting GRAPH_APP_CLIENT_ID.'
+    Push-OutputBinding -Name Response -Value $resp
+    return
+}
+
+if (-not $certBase64) {
+    $resp = New-HttpResponse -StatusCode 500 -Body 'Missing app setting EXO_APP_PFX_BASE64.'
+    Push-OutputBinding -Name Response -Value $resp
+    return
+}
+
+if (-not $certPassword) {
+    $resp = New-HttpResponse -StatusCode 500 -Body 'Missing app setting EXO_APP_PFX_PASSWORD.'
+    Push-OutputBinding -Name Response -Value $resp
+    return
+}
+
+try {
+    $pfxBytes = [Convert]::FromBase64String($certBase64)
+    $securePassword = ConvertTo-SecureString $certPassword -AsPlainText -Force
+    $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+        $pfxBytes,
+        $securePassword,
+        [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet
+    )
+} catch {
+    $resp = New-HttpResponse -StatusCode 500 -Body "Failed to load certificate: $($_.Exception.Message)"
+    Push-OutputBinding -Name Response -Value $resp
+    return
+}
+
+Connect-ExchangeOnline `
+  -AppId $appId `
+  -Organization MngEnvMCAP462928.onmicrosoft.com `
+  -Certificate $cert
+
 # Hilfsfunktion: formatiere Bytes in lesbare Grössen
 
 function Format-Bytes {
@@ -32,28 +63,27 @@ function Format-Bytes {
     elseif ($Bytes -ge 1KB) { "{0:N2} KB" -f ($Bytes / 1KB) }
     else { "$Bytes Bytes" }
 }
- 
+
 # Hole alle Mailboxen vom Typ Shared und GroupMailbox
-$mailboxes = Get-Mailbox -ResultSize 100
-$groupMailboxCount = $mailboxes.Count
+$mailboxes = Get-Mailbox -RecipientTypeDetails SharedMailbox -ResultSize Unlimited
 
-Write-Host "[groupmailbox-reports] Retrieved $groupMailboxCount shared mailboxes."
-
-$mailboxIndex = 0
 $report = foreach ($mb in $mailboxes) {
-    $mailboxIndex++
-    if ($mailboxIndex -eq 1 -or ($mailboxIndex % 25 -eq 0) -or ($mailboxIndex -eq $groupMailboxCount)) {
-        Write-Host "[groupmailbox-reports] Processing mailbox ${mailboxIndex}/${groupMailboxCount}: $($mb.PrimarySmtpAddress)"
-    }
     # Hole Statistiken
     $stat = Get-MailboxStatistics -Identity $mb.Identity
     $totalBytes = $null
-    $totalItemSizeText = $stat.TotalItemSize.ToString()
-    if ($totalItemSizeText -match '\((\d[\d,]*) bytes\)') {
-        $bytesStr = $matches[1] -replace ',', ''
-        [long]$totalBytes = [long]::Parse($bytesStr)
+    if ($stat.TotalItemSize -is [string]) {
+        if ($stat.TotalItemSize -match '\((\d[\d,]*) bytes\)') {
+            $bytesStr = $matches[1] -replace ',', ''
+            [long]$totalBytes = [long]::Parse($bytesStr)
+        }
+    } elseif ($stat.TotalItemSize -is [Microsoft.Exchange.Data.UnlimitedBytes]) {
+        $s = $stat.TotalItemSize.ToString()
+        if ($s -match '\((\d[\d,]*) bytes\)') {
+            $bytesStr = $matches[1] -replace ',', ''
+            [long]$totalBytes = [long]::Parse($bytesStr)
+        }
     }
- 
+
     # Falls nicht extrahiert, setze 0
     if (-not $totalBytes) { $totalBytes = 0 }
 
@@ -64,7 +94,7 @@ $report = foreach ($mb in $mailboxes) {
     $issueWarningQuota = $mbDetail.IssueWarningQuota
     $prohibitSendQuota = $mbDetail.ProhibitSendQuota
     $prohibitSendReceiveQuota = $mbDetail.ProhibitSendReceiveQuota
- 
+
     # Hilfsfunktion: parse Quota (liefert Bytes oder $null wenn Unlimited)
     function Parse-QuotaToBytes {
         param([string]$q)
@@ -87,22 +117,21 @@ $report = foreach ($mb in $mailboxes) {
                 'GB' { return [long]($num * 1GB) }
                 'TB' { return [long]($num * 1TB) }
             }
-        }        
+        }
         return $null
 
     }
- 
+
     $warnBytes = Parse-QuotaToBytes $issueWarningQuota.ToString()
 
     $sendBytes = Parse-QuotaToBytes $prohibitSendQuota.ToString()
 
     $sendRecvBytes = Parse-QuotaToBytes $prohibitSendReceiveQuota.ToString()
- 
+
     [PSCustomObject]@{
         DisplayName = $mb.DisplayName
         PrimarySmtpAddress = $mb.PrimarySmtpAddress.ToString()
         RecipientTypeDetails = $mb.RecipientTypeDetails
-        GroupMailboxCount = $groupMailboxCount
         ItemCount = $stat.ItemCount
         TotalItemSize_Bytes = $totalBytes
         TotalItemSize = Format-Bytes -Bytes $totalBytes
@@ -116,22 +145,16 @@ $report = foreach ($mb in $mailboxes) {
     }
 
 }
- 
+
 # Ergebnis nach Grösse absteigend sortieren und als CSV im HTTP-Response zurückgeben
 
 $csvLines = $report | Sort-Object -Property TotalItemSize_Bytes -Descending | ConvertTo-Csv -NoTypeInformation
 $csvBody = $csvLines -join "`n"
 
-Write-Host "[groupmailbox-reports] CSV report generated. Rows: $($report.Count)"
-
 $headers = @{
     "Content-Type" = "text/csv; charset=utf-8"
     "Content-Disposition" = "attachment; filename=GroupMailboxes_Quota.csv"
-    "X-GroupMailbox-Count" = "$groupMailboxCount"
 }
 
 $resp = New-HttpResponse -StatusCode 200 -Body $csvBody -Headers $headers
 Push-OutputBinding -Name Response -Value $resp
-
-Write-Host "[groupmailbox-reports] Response sent."
- 

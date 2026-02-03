@@ -4,9 +4,9 @@
       "authLevel": "function",
       "type": "httpTrigger",
       "direction": "in",
-      "name": "request",
+      "name": "Request",
       "methods": [ "get" ],
-      "route": "reports"
+      "route": "reports-appreg-cert"
     },
     {
       "name": "Response",
